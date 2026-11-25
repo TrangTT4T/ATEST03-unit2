@@ -2,6 +2,10 @@
 
 Locator strategy (Day 5): role/label/text first, then stable attributes (name, form action).
 No sleeps: Playwright auto-waits on actions and `expect()` retries assertions.
+
+Layout of every page object (one class per file): behaviour first, then a ``# --- Locators ---``
+section at the BOTTOM of the class. Methods use those names; a selector that depends on data is a
+template filled with ``.format(...)``. No selector is written inline in a method.
 """
 import re
 
@@ -41,17 +45,22 @@ class BasePage:
     # Header ----------------------------------------------------------------
     @property
     def mini_cart(self) -> Locator:
-        return self.page.get_by_role("link", name=re.compile(r"My Cart \(\d+\)")).first
+        return self.page.locator(self._mini_cart).first
 
     def mini_cart_count(self) -> int:
         return int(re.search(r"\((\d+)\)", self.mini_cart.inner_text()).group(1))
 
     @property
     def search_box(self) -> Locator:
-        return self.page.locator("input[name='q']").first
+        return self.page.locator(self._search_box).first
 
     def search(self, keyword: str):
         self.search_box.fill(keyword)
         self.search_box.press("Enter")
         self.page.wait_for_url(re.compile(r"/search"))
         return self
+
+    # --- Locators -------------------------------------------------------------
+    # Header (on every page)
+    _mini_cart = r"role=link[name=/My Cart \(\d+\)/]"
+    _search_box = "input[name='q']"
