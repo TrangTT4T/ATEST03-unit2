@@ -61,6 +61,21 @@ Verified against a local mock with the standard Shopify page structure. If a loc
 
 `tests/features/` and `dataset/products.json` are copies of the [ATEST03-unit1](https://github.com/TrangTT4T/ATEST03-unit1) repository. When a scenario changes there, copy the file here.
 
+## CI and manual runs (GitHub Actions)
+
+`.github/workflows/e2e.yml` runs `@smoke` on every push and the default suite nightly.
+To choose what runs: **Actions → e2e → Run workflow**, then pick
+
+| Option | Values |
+| --- | --- |
+| suite | all, smoke, regression, critical, high, medium, negative, network, cart, checkout, login, product, register, search |
+| browser | chromium, firefox, webkit |
+| workers | 1, 2, 4, auto |
+| tracing | retain-on-failure, on, off |
+| auth | also run the saved-login tests (add the `SAUCE_EMAIL` and `SAUCE_PASSWORD` secrets in Settings → Secrets and variables → Actions) |
+
+Reports, traces, screenshots and videos are attached to the run as the `e2e-reports-<browser>` artifact.
+
 ## ATEST03 course repositories
 
 One repository per unit:
