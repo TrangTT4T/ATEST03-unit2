@@ -9,44 +9,51 @@ TOTAL = re.compile(r"(sub)?total[^£]{0,40}£\s?([\d,]+\.\d{2})", re.IGNORECASE)
 
 
 class CartPage(BasePage):
+    """Every locator is scoped to #cart: each page also contains a HIDDEN mini-cart drawer with the
+    same rows and quantity boxes, which would otherwise be counted twice."""
+
     path = "/cart"
 
     @property
+    def root(self) -> Locator:
+        return self.page.locator(self._root)
+
+    @property
     def quantity_inputs(self) -> Locator:
-        return self.page.locator(self._quantity_inputs)
+        return self.root.locator(self._quantity_inputs)
 
     def total_quantity(self) -> int:
         inputs = self.quantity_inputs
         return sum(int(inputs.nth(i).input_value() or 0) for i in range(inputs.count()))
 
     def line_input(self, product_name: str) -> Locator:
-        row = (self.page.locator(self._row)
+        row = (self.root.locator(self._row)
                .filter(has=self.page.locator(self._product_link.format(name=product_name)))
-               .filter(has=self.quantity_inputs).last)
+               .filter(has=self.page.locator(self._quantity_inputs)).last)  # has=: relative to the row
         return row.locator(self._quantity_inputs).first
 
     def set_quantity(self, product_name: str, quantity: int):
         # Quantity 0 + Update removes the line (standard Shopify behaviour).
         self.line_input(product_name).fill(str(quantity))
-        self.submit(self.page.locator(self._update_button).first)
+        self.submit(self.root.locator(self._update_button).first)
 
     def remove(self, product_name: str):
         self.set_quantity(product_name, 0)
 
     def total(self) -> float:
-        match = TOTAL.search(self.page.locator(self._body).inner_text())
+        text = self.root.inner_text()
+        match = TOTAL.search(text)
         if match:
             return float(match.group(2).replace(",", ""))
-        form = self.page.locator(self._cart_form).first
-        return money_to_float(re.findall(r"£\s?[\d,]+\.\d{2}", form.inner_text())[-1])
+        return money_to_float(re.findall(r"£\s?[\d,]+\.\d{2}", text)[-1])
 
     def checkout(self):
-        self.submit(self.page.locator(self._checkout_button).first)
+        self.submit(self.root.locator(self._checkout_button).first)
         self.page.wait_for_url(re.compile(r"checkout"))
 
     # --- Locators -------------------------------------------------------------
-    _body = "body"
-    _cart_form = "form[action*='/cart']"
+    _root = "#cart"
+    # Inside #cart:
     _quantity_inputs = "input[name^='updates']"
     # A cart line: the row that holds both the product link and a quantity box.
     _row = "tr, li, div"

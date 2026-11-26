@@ -9,6 +9,7 @@ pytestmark = [pytest.mark.network, pytest.mark.regression]
 
 
 @pytest.mark.medium
+@pytest.mark.add_to_cart
 def test_third_party_calls_are_blocked_and_shop_still_works(shop, page, block_third_party, products):
     shop.home.open()
     # A third-party call made from the page is aborted by the autouse route.
@@ -22,15 +23,18 @@ def test_third_party_calls_are_blocked_and_shop_still_works(shop, page, block_th
 
 
 @pytest.mark.critical
+@pytest.mark.add_to_cart
 def test_add_to_cart_posts_the_product_form(shop, page, products):
     shop.product.open_product(products["Striped top"]["handle"])
     with page.expect_request(lambda r: "/cart/add" in r.url and r.method == "POST") as request_info:
         shop.product.add_button.click()
-    assert "id=" in (request_info.value.post_data or ""), "add-to-cart POST carries no product id"
+    body = request_info.value.post_data or ""  # multipart (FormData) or url-encoded, depending on the theme
+    assert 'name="id"' in body or "id=" in body, "add-to-cart POST carries no product id"
 
 
 @pytest.mark.critical
 @pytest.mark.negative
+@pytest.mark.add_to_cart
 def test_failed_add_to_cart_request_does_not_add_the_product(shop, page, products):
     # Fault injection: the server answers 500 to the add-to-cart call.
     page.route("**/cart/add*", lambda route: route.fulfill(status=500, body="Internal Server Error"))
@@ -41,6 +45,7 @@ def test_failed_add_to_cart_request_does_not_add_the_product(shop, page, product
 
 
 @pytest.mark.high
+@pytest.mark.browse_catalog
 @pytest.mark.only_browser("chromium")
 def test_catalog_loads_on_a_slow_network(shop, page, context, products):
     # Chromium DevTools protocol: 400 ms latency, ~1.5 Mbit/s, to expose timing assumptions.

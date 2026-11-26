@@ -9,7 +9,7 @@ import re
 import pytest
 from playwright.sync_api import Browser, expect
 
-pytestmark = [pytest.mark.auth, pytest.mark.high]
+pytestmark = [pytest.mark.auth, pytest.mark.high, pytest.mark.secure_login]
 
 
 def test_saved_auth_state_opens_account_without_login(browser: Browser, base_url, customer_state):

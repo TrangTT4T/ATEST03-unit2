@@ -1,8 +1,8 @@
 # Unit 2 – Playwright End-to-End Automation (Sauce Demo)
 
-pytest + pytest-bdd + Playwright · Website kiểm thử: https://sauce-demo.myshopify.com · Code: `ATEST03-unit2/`
+pytest + Playwright (pytest-playwright) · Website kiểm thử: https://sauce-demo.myshopify.com · Code: `ATEST03-unit2/`
 
-Unit 2 kế thừa Unit 1: cùng các feature Gherkin, dữ liệu test và tag, chạy trên Playwright (Day 5); thêm tracing, kiểm soát network, lưu phiên đăng nhập, chạy song song (Day 6); áp dụng cho các luồng ưu tiên trong bài lab (Day 7); và làm cho ổn định bằng phân tích lỗi và kiểm soát flaky (Day 8). Mọi thứ chạy bằng lệnh `pytest`.
+Unit 2 là Playwright thuần: tự động hóa cùng các yêu cầu, rủi ro và dữ liệu test của Unit 1 bằng test pytest gọi page object, không có lớp Gherkin (BDD là chủ đề của Unit 1; BDD kết hợp Playwright là mock project ở Unit 5). Test được xây ở Day 5; thêm tracing, kiểm soát network, lưu phiên đăng nhập, chạy song song (Day 6); áp dụng cho các luồng ưu tiên trong bài lab (Day 7); và làm cho ổn định bằng phân tích lỗi và kiểm soát flaky (Day 8). Mọi thứ chạy bằng lệnh `pytest`.
 
 | Day | Nội dung | LO | Hình thức | Phút | Format |
 | --- | --- | --- | --- | --- | --- |
@@ -16,17 +16,20 @@ Nội dung: Day 5 – Kiến trúc · Day 6 – Tracing, network, đăng nhập,
 
 ```text
 ATEST03-unit2/
-├── pytest.ini                   # base_url, thư mục feature, tracing, báo cáo, marker
+├── pytest.ini                   # base_url, tracing, báo cáo, marker (--strict-markers)
 ├── requirements.txt
 ├── dataset/products.json        # cùng dữ liệu test với Unit 1
-├── pages/                       # Page Object Playwright (chuyển từ Unit 1)
+├── dataset/requirements.json    # yêu cầu của Unit 1: marker -> mã REQ, tiêu đề, rủi ro
+├── helper_utility/traceability.py   # ma trận truy vết (logic thuần)
+├── pages/                       # Page Object Playwright (chuyển từ Unit 1): mỗi file một class
 └── tests/
-    ├── features/                # các file Gherkin của Unit 1, giữ nguyên
-    ├── steps/shop_steps.py      # các câu step của Unit 1 trên Playwright
     ├── conftest.py              # fixture: dữ liệu, cô lập, kiểm soát network, đăng nhập
-    ├── test_bdd_features.py     # chạy mọi feature file (pytest-bdd)
+    ├── traceability_plugin.py   # reports/traceability.md và .csv
+    ├── test_cart.py  test_checkout.py  test_catalog.py
+    ├── test_login.py test_register.py  test_search.py   # mỗi khu vực một file, mỗi yêu cầu một marker
     ├── test_network.py          # chặn request, kiểm tra request, giả lập lỗi, mạng chậm
-    └── test_auth_state.py       # phiên đăng nhập đã lưu + kiểm tra cô lập
+    ├── test_auth_state.py       # phiên đăng nhập đã lưu + kiểm tra cô lập
+    └── unit/                    # quy tắc của framework (không mở trình duyệt): cấu trúc page object, truy vết
 ```
 
 ---
@@ -35,17 +38,17 @@ ATEST03-unit2/
 
 Unit 2 · LO3 · Concept/Lecture · 120 phút · Virtual
 
-Unit 2 giữ những gì Unit 1 đã xây và đổi "động cơ": cùng 6 feature file và tag, giờ chạy trên Playwright; fixture của pytest thay cho hook của behave.
+Unit 2 giữ CÁI GÌ Unit 1 kiểm thử (yêu cầu, rủi ro, dữ liệu) và đổi CÁCH LÀM: test pytest thuần gọi page object Playwright, marker thay cho tag Gherkin, fixture của pytest thay cho hook của behave.
 
 ### 1. Kế thừa từ Unit 1 và phần mới
 
 | Unit 1 (behave + Selenium) | Unit 2 (pytest + Playwright) | Trạng thái |
 | --- | --- | --- |
-| `tests/features/*.feature` | Cùng file trong `tests/features/`, chạy qua `tests/test_bdd_features.py` (pytest-bdd) | Kế thừa nguyên vẹn |
+| `tests/features/*.feature` (14 scenario) | Mỗi scenario thành một test pytest trong `tests/test_<khu_vực>.py`; bảng Examples thành `@pytest.mark.parametrize` | Viết lại thành test thường |
+| Tag yêu cầu `@add_to_cart` … | Marker `@pytest.mark.add_to_cart` …; danh mục `dataset/requirements.json` (cùng file) | Kế thừa |
 | `dataset/products.json` | Cùng file | Kế thừa |
-| Tag `@cart`, `@critical`, `@smoke`, `@negative` | Thành marker pytest: `pytest -m smoke`, `pytest -m cart` | Kế thừa |
+| Tag `@critical`, `@smoke`, `@negative` | Cùng tên, thành marker pytest: `pytest -m smoke`; khu vực là file: `pytest tests/test_cart.py` | Kế thừa |
 | Page Object (`pages/`) | Cùng tên class, dùng `Locator` của Playwright thay `WebElement` | Chuyển đổi |
-| Step definitions (`tests/steps/`) | `tests/steps/shop_steps.py`, cùng câu chữ | Chuyển đổi |
 | Hook trong `tests/environment.py` | Fixture trong `tests/conftest.py` | Thay thế |
 | Explicit wait `WebDriverWait` | Action tự chờ + `expect()` tự thử lại | Thay thế |
 | Trình duyệt mới mỗi scenario | **Browser context** mới mỗi test (rẻ hơn nhiều) | Cải tiến |
@@ -68,11 +71,11 @@ Tạo context chỉ mất vài mili giây, nên mỗi test có giỏ hàng sạc
 
 | Ưu tiên | Locator | Ví dụ trong `pages/` |
 | --- | --- | --- |
-| 1 | Role + tên hiển thị | `page.get_by_role("link", name=re.compile(r"My Cart \(\d+\)"))` |
-| 2 | Role + level | `page.get_by_role("heading", level=1)` (tên sản phẩm) |
-| 3 | Text | `page.get_by_text("£60.00")` |
+| 1 | Role + tên hiển thị | `role=link[name=/My Cart \(\d+\)/]` (mini cart) |
+| 2 | Thuộc tính ngữ nghĩa | `[itemprop='name']` (tên sản phẩm: `<h1>` đầu tiên của trang là logo) |
+| 3 | Text | `text=No results found for` |
 | 4 | Thuộc tính ổn định / action của form | `form[action*='/cart/add']`, `input[name^='updates']` |
-| 5 | Locator có filter | `locator("tr, li, div").filter(has=get_by_role("link", name="Striped top"))` |
+| 5 | Locator có filter | dòng trong `#cart` `.filter(has=role=link[name='Striped top' s])`: giới hạn trong `#cart` vì trang nào cũng có mini-cart ẩn lặp lại các dòng đó |
 | Không dùng | Theo vị trí | `:nth-child`, `xpath=(//a)[3]` |
 
 ### 4. Fixture (`tests/conftest.py`)
@@ -103,11 +106,15 @@ def cart_with(shop, products):
 `expect()` tự thử lại tới khi đúng hoặc hết timeout (5 giây), nên không phải viết wait:
 
 ```python
-@then(parsers.re(r"the cart should contain (?P<count>\d+) items?"), converters={"count": int})
-def cart_count(shop, count):
+@pytest.mark.critical
+@pytest.mark.smoke
+@pytest.mark.add_to_cart                      # yêu cầu REQ-01
+def test_add_an_in_stock_product_to_the_cart(shop, products):
+    shop.product.open_product(products["Grey jacket"]["handle"])
+    shop.product.add_to_cart(1)               # chờ response AJAX của /cart/add
     cart = shop.cart.open()
-    expect(cart.mini_cart).to_have_text(re.compile(rf"My Cart \({count}\)"))
-    assert cart.total_quantity() == count
+    expect(cart.mini_cart).to_have_text(re.compile(r"My Cart \(1\)"))
+    assert cart.total() == money_to_float("£55.00")
 ```
 
 | Unit 1 | Unit 2 |
@@ -126,7 +133,7 @@ def cart_count(shop, count):
 cd ATEST03-unit2
 pip install -r requirements.txt
 playwright install chromium
-pytest --collect-only -q          # 25 test: 21 từ feature của Unit 1 + 4 test riêng của Playwright
+pytest --collect-only -q          # 28 test trình duyệt (22 chạy mặc định) + 36 test framework
 pytest -m smoke                   # cùng tag smoke như Unit 1
 pytest --headed --slowmo 300      # xem trình duyệt chạy
 ```
@@ -203,7 +210,7 @@ Cho phép: host của store và `*.shopify.com`, `*.myshopify.com`, `*.shopifycd
 | `test_failed_add_to_cart_request_does_not_add_the_product` | `page.route(...).fulfill(status=500)`: giả lập lỗi server | R01 |
 | `test_catalog_loads_on_a_slow_network` | CDP của Chromium `Network.emulateNetworkConditions` (trễ 400 ms) | R05 |
 
-Test thường mang cùng marker mức rủi ro như tag Gherkin (`@pytest.mark.critical`), nên `pytest -m critical` chọn được cả hai loại.
+Test network cũng mang marker rủi ro và marker yêu cầu như mọi test khác (`@pytest.mark.critical`, `@pytest.mark.add_to_cart`).
 
 ```python
 page.route("**/cart/add*", lambda route: route.fulfill(status=500, body="Internal Server Error"))
@@ -259,8 +266,9 @@ An toàn vì mỗi test có context riêng (Day 5) và không test nào phụ th
 | HTML | pytest-html (`--html` trong `pytest.ini`) | `reports/report.html` |
 | JUnit XML | `--junitxml` | `reports/junit.xml` |
 | Trace, ảnh, video | pytest-playwright | `test-results/` |
+| Ma trận truy vết | `tests/traceability_plugin.py` | `reports/traceability.md`, `.csv` |
 
-Lọc theo marker thay cho một báo cáo truy vết riêng: `pytest -m critical --collect-only -q` liệt kê mọi test rủi ro Critical, cả Gherkin lẫn test thường; `pytest -m cart --collect-only -q` liệt kê một nhóm chức năng.
+Ma trận trả lời câu hỏi "yêu cầu nào đã đạt?": mỗi yêu cầu (REQ-01 … REQ-08) một dòng, kèm các test và trạng thái: FAIL nếu có test fail, PASS nếu mọi test đã chạy đều pass, NOT RUN nếu không test nào chạy (test `manual` / `data_creating` / `auth` bị lọc vẫn được liệt kê, không bị giấu), NO TEST nếu chưa test nào mang marker đó. Ma trận dựng từ marker yêu cầu, chạy đúng cả với `pytest -n auto` (worker gửi danh sách test về controller). `pytest -m add_to_cart` chạy riêng một yêu cầu; `pytest -m critical --collect-only -q` liệt kê mọi test rủi ro Critical.
 
 ### 6. Câu hỏi ôn tập
 
@@ -275,32 +283,32 @@ Lọc theo marker thay cho một báo cáo truy vết riêng: `pytest -m critica
 
 Unit 2 · LO3 · Assignment/Lab · 150 phút · Hybrid
 
-Bài lab tự động hóa các ưu tiên rủi ro của Unit 1 trên Playwright: 25 test trong lần chạy mặc định (21 scenario của Unit 1 + 4 test network), thêm 2 test đăng nhập khi có tài khoản.
+Bài lab tự động hóa các ưu tiên rủi ro của Unit 1 trên Playwright: 22 test trình duyệt trong lần chạy mặc định, thêm 2 test đăng nhập khi có tài khoản, 3 test `manual` (CAPTCHA) và 1 test `data_creating`.
 
 ### 1. Luồng nghiệp vụ theo ưu tiên (từ bảng rủi ro của Unit 1)
 
 | Ưu tiên | Luồng | Risk | Test | Kỹ thuật Unit 2 |
 | --- | --- | --- | --- | --- |
-| P1 | Thêm vào giỏ, tổng tiền, đổi, xóa | R01 Critical (20) | 5 scenario từ `cart.feature` + 2 test network | fixture `cart_with`, `expect_request`, giả lập lỗi 500 |
-| P1 | Giỏ hàng → checkout | R02 Critical (15) | 1 scenario từ `checkout.feature` | `expect(page).to_have_url` |
-| P1 | Trang chi tiết, hàng hết | R03 High (12) | 2 scenario từ `product.feature` | locator theo role |
-| P1 | Đăng nhập, reset mật khẩu, phiên đã lưu | R04 High (12) | 3 scenario + 2 test auth | storage state `customer_state` |
-| P1 | Giá và tình trạng trên catalog | R05 High (12) | 7 dòng Examples + test mạng chậm | giới hạn băng thông qua CDP |
-| P2 | Kiểm tra lỗi đăng ký | R06 Medium (9) | 1 scenario (+1 `@data-creating`) | — |
-| P2 | Tìm kiếm | R07 Medium (9) | 2 scenario | — |
+| P1 | Thêm vào giỏ, tổng tiền, đổi, xóa | R01 Critical (20) | 5 test trong `test_cart.py` + 3 test network | fixture `cart_with`, `expect_request`, giả lập lỗi 500 |
+| P1 | Giỏ hàng → checkout | R02 Critical (15) | 1 test trong `test_checkout.py` | `expect(page).to_have_url` |
+| P1 | Trang chi tiết, hàng hết | R03 High (12) | 2 test trong `test_catalog.py` | `[itemprop='name']`, `to_be_disabled()` |
+| P1 | Đăng nhập, reset mật khẩu, phiên đã lưu | R04 High (12) | reset mật khẩu + 2 test auth; 2 test đăng nhập sai là `manual` (CAPTCHA) | storage state `customer_state` |
+| P1 | Giá và tình trạng trên catalog | R05 High (12) | 7 trường hợp parametrize (mỗi sản phẩm một) + test mạng chậm | `parametrize`, giới hạn băng thông qua CDP |
+| P2 | Kiểm tra lỗi đăng ký | R06 Medium (9) | 1 test `manual` (CAPTCHA) + 1 test `data_creating` | — |
+| P2 | Tìm kiếm | R07 Medium (9) | 2 test trong `test_search.py` | thông báo không có kết quả |
 | P2 | Dịch vụ bên thứ ba lỗi không làm hỏng việc mua hàng | R09 Medium (6) | 1 test network | route của `block_third_party` |
 
 ### 2. File
 
 | File | Vai trò |
 | --- | --- |
-| `tests/test_bdd_features.py` | `scenarios(".")` chạy mọi file trong `tests/features/` |
-| `tests/steps/shop_steps.py` | Cài đặt bằng Playwright cho mọi step của Unit 1 |
+| `tests/test_<khu_vực>.py` | Mỗi khu vực một file; test nào cũng có marker rủi ro, bộ chạy và yêu cầu |
+| `tests/traceability_plugin.py` | Ma trận truy vết của mỗi lần chạy |
 | `tests/conftest.py` | Fixture, kiểm soát network, trạng thái đăng nhập |
 | `tests/test_network.py` | Chặn request, kiểm tra request, giả lập lỗi, mạng chậm |
 | `tests/test_auth_state.py` | Phiên đăng nhập đã lưu và kiểm tra cô lập |
 | `pages/` | Page Object chuyển từ Unit 1 |
-| `pytest.ini` | base URL, tracing, báo cáo, bộ lọc marker mặc định, thư mục feature |
+| `pytest.ini` | base URL, tracing, báo cáo, bộ lọc marker mặc định, danh sách marker (`--strict-markers`) |
 
 ### 3. Chạy bài lab
 
@@ -320,18 +328,19 @@ pytest -m "critical and not negative"
 
 | Kiểm tra | Kết quả |
 | --- | --- |
-| `pytest` | 25 pass, 3 bị lọc (`@auth` ×2, `@data-creating` ×1) |
-| `pytest -n auto` | 25 pass |
+| `pytest` | 58 pass (22 trình duyệt + 36 framework), 6 bị lọc (`auth` ×2, `manual` ×3, `data_creating` ×1) |
+| `pytest -n auto` | 58 pass; `reports/traceability.csv` giống hệt lần chạy tuần tự |
+| `reports/traceability.md` | mọi yêu cầu PASS, riêng REQ-07 NOT RUN (cả hai test đăng ký bị lọc) |
 | `pytest -m auth` (có tài khoản) | 2 pass |
 | Test fail | `test-results/<test>/trace.zip`, ảnh, video |
 
-Đã chạy trên site giả lập cấu trúc Shopify. Khi chạy trên store thật, kiểm tra locator trước (phát hiện F2 của Unit 1).
+Đã chạy trên store thật (2026-11-25). Store thật dạy bộ test hai điều: theme cần jQuery từ `ajax.googleapis.com` (bị chặn thì nút "Sold Out" không bao giờ hiện và Add to Cart thành post cả trang), và CAPTCHA của store chặn form đăng nhập và đăng ký.
 
 ### 5. Nhiệm vụ lab
 
 1. Thêm test giả lập lỗi: trang giỏ hàng trả 503. Khách hàng phải thấy gì? Viết assertion.
 2. Làm `test_catalog_loads_on_a_slow_network` fail bằng cách giảm timeout xuống 1 giây, mở trace và tìm request chậm.
-3. Thêm một scenario vào `tests/features/search.feature`. Phải sửa code nào? (Đáp án: không phải sửa, trừ khi câu step là câu mới.)
+3. Thêm một test tìm "sandals" với đúng marker yêu cầu và rủi ro. Chạy `pytest` và kiểm tra `reports/traceability.md` liệt kê nó dưới REQ-08.
 4. Chạy `pytest -n auto` ba lần, so thời gian với chạy tuần tự.
 
 ---
@@ -346,7 +355,7 @@ Day 8 khép lại cả hai Unit: phần A ôn tập Unit 2 so với Unit 1; ph�
 
 | Chủ đề | Unit 1 (Day 1–4) | Unit 2 (Day 5–7) |
 | --- | --- | --- |
-| Đặc tả | Feature Gherkin, tag | Cùng file, chạy bằng pytest-bdd |
+| Đặc tả | Feature Gherkin, tag | Test pytest thường; marker cho yêu cầu, rủi ro và bộ chạy |
 | Động cơ | Selenium WebDriver | Playwright (tự chờ, context) |
 | Setup / teardown | Hook của behave | Fixture của pytest (`conftest.py`) |
 | Cô lập | Trình duyệt mới mỗi scenario | Context mới mỗi test |
@@ -355,7 +364,7 @@ Day 8 khép lại cả hai Unit: phần A ôn tập Unit 2 so với Unit 1; ph�
 | Network | Không kiểm soát | Chặn, kiểm tra, giả lập lỗi, giả lập chậm |
 | Đăng nhập | Đăng nhập qua UI mỗi lần | Dùng lại storage state đã lưu |
 | Tốc độ | Tuần tự | Song song `-n auto` |
-| Lọc | `behave --tags=@cart` | `pytest -m cart` |
+| Lọc | `behave --tags=@cart` | `pytest tests/test_cart.py`, `pytest -m add_to_cart` |
 
 Câu hỏi ôn tập:
 
@@ -376,7 +385,7 @@ test fail
  │     └─ tab Network: mã trạng thái, request chậm hoặc lỗi
  ├─ 3. phân loại
  │     ├─ lỗi sản phẩm   → sai giá, sai tổng, trang lỗi → báo bug kèm trace
- │     ├─ lỗi test       → locator đổi, giả định sai → sửa trong pages/ hoặc tests/steps/
+ │     ├─ lỗi test       → locator đổi, giả định sai → sửa trong pages/ hoặc trong test
  │     └─ môi trường     → store sập, captcha, mạng → chạy lại sau, gắn @manual nếu kéo dài
  └─ 4. chạy lại pass mà không sửa gì → flaky: xem B2
 ```
@@ -422,9 +431,9 @@ Nguyên nhân hay gặp và cách code này xử lý:
 Lệnh tìm nhanh (PowerShell; trong Git Bash dùng `grep -rnE`):
 
 ```powershell
-Select-String -Path tests\*.py, tests\steps\*.py, pages\*.py -Pattern 'wait_for_timeout|time\.sleep'   # chờ cố định
-Select-String -Path tests\*.py, tests\steps\*.py, pages\*.py -Pattern 'force=True'                     # bấm cưỡng ép
-Select-String -Path tests\*.py, tests\steps\*.py -Pattern ':nth-child|nth=|\.nth\('                     # selector theo vị trí
+Select-String -Path tests\*.py, pages\*.py -Pattern 'wait_for_timeout|time\.sleep'   # chờ cố định
+Select-String -Path tests\*.py, pages\*.py -Pattern 'force=True'                     # bấm cưỡng ép
+Select-String -Path tests\*.py -Pattern ':nth-child|nth=|\.nth\('                     # selector theo vị trí
 ```
 
 | Quy tắc | Lý do |
@@ -433,12 +442,12 @@ Select-String -Path tests\*.py, tests\steps\*.py -Pattern ':nth-child|nth=|\.nth
 | Không `force=True` | Che đi phần tử mà người dùng không bấm được |
 | Không selector theo vị trí trong test | Hỏng khi bố cục thay đổi |
 | Không CSS/XPath thô trong test | Locator phải nằm trong `pages/` |
-| Test thường nào cũng có marker mức rủi ro (`critical`, `high`, `medium`) | Giữ `pytest -m critical` đầy đủ |
+| Test nào cũng có marker mức rủi ro (`critical`, `high`, `medium`) và đúng một marker yêu cầu | Giữ `pytest -m critical` và ma trận truy vết đầy đủ (`tests/unit/test_traceability.py`) |
 
 #### B4. Tiêu chí bảo trì (checklist)
 
-- [ ] Nhóm chức năng và mức rủi ro nào cũng có ít nhất một test: `pytest -m cart --collect-only -q`, `pytest -m critical --collect-only -q`
-- [ ] Gherkin vẫn declarative (không URL, CSS, click, wait trong `tests/features/`)
+- [ ] Yêu cầu nào cũng có test: `reports/traceability.md` không có dòng NO TEST (`tests/unit/test_traceability.py` kiểm tra)
+- [ ] Test đọc giống yêu cầu: thao tác và kiểm tra qua page object, không URL hay CSS trong test
 - [ ] Không có locator ngoài `pages/`
 - [ ] Không chờ cố định, không `force=True` (lệnh tìm ở B3 không ra kết quả)
 - [ ] 0 test flaky trong 3 lần chạy liên tiếp (B2)
@@ -451,5 +460,5 @@ Select-String -Path tests\*.py, tests\steps\*.py -Pattern ':nth-child|nth=|\.nth
 | Kiểm tra | Kết quả trên site giả lập |
 | --- | --- |
 | Lệnh tìm ở B3 | không có kết quả |
-| 3 lần chạy `pytest` | mỗi lần 25 pass, 0 flaky |
+| 3 lần chạy `pytest` | mỗi lần 58 pass, 0 flaky |
 | Cố ý làm fail | `trace.zip`, `test-failed-1.png`, `video.webm` trong `test-results/` |

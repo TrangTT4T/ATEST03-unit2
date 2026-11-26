@@ -1,8 +1,9 @@
 """Shared fixtures and hooks for the Playwright suite (Unit 2).
 
-Inherited from Unit 1: feature files, dataset/products.json, tags (@critical, @smoke ...), Page Object pattern,
-one fresh browser state per scenario, screenshot on failure.
-New in Unit 2: pytest fixtures instead of behave hooks, network control, tracing, auth state, xdist.
+Inherited from Unit 1: the requirements and risks (dataset/requirements.json), the test data
+(dataset/products.json), the Page Object pattern, one fresh browser state per test.
+New in Unit 2: plain Playwright tests on pytest - fixtures instead of hooks, markers instead of
+Gherkin tags, network control, tracing, auth state, xdist.
 
 Fixture map (Day 5-6):
   browser (session) -> context (one per test: isolation) -> page (one per test)
@@ -21,14 +22,17 @@ from urllib.parse import urlparse
 import pytest
 from playwright.sync_api import Browser, BrowserContext, Page
 
-from pages import BasePage, CartPage, CatalogPage, LoginPage, ProductPage, RegisterPage, SearchPage
+from pages import BasePage, CartPage, CatalogPage, CheckoutPage, LoginPage, ProductPage, RegisterPage, SearchPage
 
-pytest_plugins = ["steps.shop_steps"]  # Gherkin step definitions (pytest-bdd)
+pytest_plugins = ["traceability_plugin"]  # reports/traceability.md and .csv
 
 ROOT = Path(__file__).resolve().parent.parent
 DATASET = ROOT / "dataset"  # same file as the ATEST03-unit1 repo: dataset/products.json
 AUTH_FILE = ROOT / ".auth" / "customer.json"
 SHOPIFY_SUFFIXES = (".shopify.com", ".myshopify.com", ".shopifycdn.com", ".shopifycloud.com", ".shopifysvc.com")
+# Third-party hosts the THEME needs to work. The shop loads jQuery from Google's CDN; blocked, the
+# product page never renders its "Sold Out" button (found 2026-11-25). Tracking hosts stay blocked.
+THEME_DEPENDENCIES = ("ajax.googleapis.com",)
 
 
 # --- data ---------------------------------------------------------------------
@@ -50,7 +54,7 @@ def _is_allowed(url: str, store_host: str) -> bool:
     host = urlparse(url).hostname or ""
     if urlparse(url).scheme in ("data", "blob"):
         return True
-    return host in (store_host, "localhost", "127.0.0.1") or host.endswith(SHOPIFY_SUFFIXES)
+    return host in (store_host, "localhost", "127.0.0.1", *THEME_DEPENDENCIES) or host.endswith(SHOPIFY_SUFFIXES)
 
 
 @pytest.fixture(autouse=True)
@@ -81,8 +85,8 @@ def block_third_party(request, context: BrowserContext, base_url: str):
 @pytest.fixture
 def shop(page: Page) -> SimpleNamespace:
     return SimpleNamespace(home=BasePage(page), catalog=CatalogPage(page), product=ProductPage(page),
-                           cart=CartPage(page), login=LoginPage(page), register=RegisterPage(page),
-                           search=SearchPage(page))
+                           cart=CartPage(page), checkout=CheckoutPage(page), login=LoginPage(page),
+                           register=RegisterPage(page), search=SearchPage(page))
 
 
 @pytest.fixture

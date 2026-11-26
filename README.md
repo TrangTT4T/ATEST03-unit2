@@ -1,41 +1,49 @@
-# Sauce Demo – Unit 2: Playwright End-to-End Automation (builds on Unit 1 BDD)
+# Sauce Demo – Unit 2: Playwright End-to-End Automation
 
-pytest + pytest-bdd + Playwright · Application under test: https://sauce-demo.myshopify.com
+pytest + Playwright (pytest-playwright) · Application under test: https://sauce-demo.myshopify.com
 
 Covers Day 5–8. Everything runs with the `pytest` command. The whole unit is documented in one file, with a section per day: `docs/Unit2_Playwright_vi.md` (Tiếng Việt) and `docs/Unit2_Playwright_en.md` (English).
 
-Unit 2 carries the BDD part of Unit 1 (the Gherkin feature files and `dataset/products.json`), runs it on Playwright, then adds Playwright-only capabilities.
+Unit 2 is **plain Playwright**: tests are pytest functions that drive page objects, with no Gherkin layer. Unit 1 (behave + Selenium) is the BDD unit; combining BDD with Playwright is the job of the mock project (Unit 5). What Unit 2 takes over from Unit 1 is the *what* — requirements, risks and test data — not the *how*.
 
-| From Unit 1 (copied unchanged) | Added in Unit 2 |
+| From Unit 1 | In Unit 2 |
 | --- | --- |
-| `tests/features/*.feature`: 6 features, 14 scenarios, tags `@cart` `@critical` `@smoke` | Run on Playwright by `tests/test_bdd_features.py` (pytest-bdd); tags become pytest markers |
+| Requirements REQ-01 … REQ-08 and their risks | `dataset/requirements.json` (same file); every test carries one requirement marker, e.g. `@pytest.mark.add_to_cart` |
+| Gherkin tags `@critical` `@smoke` `@negative` | pytest markers with the same names, declared in `pytest.ini` (`--strict-markers`) |
 | `dataset/products.json` | Same file |
-| Page Object pattern | `pages/` with Playwright locators (role/text first), auto-waiting |
-| Step sentences | `tests/steps/shop_steps.py` on Playwright |
+| Page Object pattern, one class per file, locators at the bottom | `pages/` with Playwright locators and auto-waiting |
 | Hooks in `environment.py` | Fixtures in `tests/conftest.py` |
 | Screenshot on failure | Trace + screenshot + video on failure |
 | — | Network interception, fault injection, throttling, saved auth state, parallel runs, flaky reruns |
 
 | Day | Topic | Section in the unit document | Code used |
 | --- | --- | --- | --- |
-| 5 | Architecture, contexts, locators, fixtures, assertions, isolation | Day 5 section | `pages/`, `tests/conftest.py`, `tests/test_bdd_features.py`, `tests/steps/` |
-| 6 | Tracing, network interception, auth state, parallel, reporting | Day 6 section | `pytest.ini`, `tests/test_network.py`, `tests/test_auth_state.py` |
+| 5 | Architecture, contexts, locators, fixtures, assertions, isolation | Day 5 section | `pages/`, `tests/conftest.py`, `tests/test_cart.py` … |
+| 6 | Tracing, network interception, auth state, parallel, reporting | Day 6 section | `pytest.ini`, `tests/test_network.py`, `tests/test_auth_state.py`, `tests/traceability_plugin.py` |
 | 7 | Lab: prioritised end-to-end workflows | Day 7 section | full suite |
 | 8 | Revision + reliability, flaky control, stability | Day 8 section | repeated runs, `pytest-rerunfailures`, trace viewer |
 
 ```text
 ATEST03-unit2/
-├── pytest.ini                   # base_url, features folder, tracing, reports, markers
+├── pytest.ini                   # base_url, tracing, reports, markers (--strict-markers)
 ├── requirements.txt
-├── dataset/products.json        # Unit 1 test data
-├── pages/                       # Playwright Page Objects
+├── dataset/
+│   ├── products.json            # Unit 1 test data
+│   └── requirements.json        # Unit 1 requirements: marker -> REQ id, title, risk
+├── helper_utility/traceability.py   # the requirement matrix (pure logic)
+├── pages/                       # Playwright Page Objects: one class per file
 ├── tests/
-│   ├── features/                # Unit 1 Gherkin files (unchanged)
-│   ├── steps/shop_steps.py      # Unit 1 steps on Playwright
 │   ├── conftest.py              # fixtures, network control, auth state
-│   ├── test_bdd_features.py     # runs every feature file
-│   ├── test_network.py
-│   └── test_auth_state.py
+│   ├── traceability_plugin.py   # writes reports/traceability.md and .csv
+│   ├── test_cart.py             # @add_to_cart, @update_cart        (Critical)
+│   ├── test_checkout.py         # @start_checkout                   (Critical)
+│   ├── test_catalog.py          # @browse_catalog, @product_details (High)
+│   ├── test_login.py            # @secure_login                     (High)
+│   ├── test_register.py         # @create_account                   (Medium)
+│   ├── test_search.py           # @search_products                  (Medium)
+│   ├── test_network.py          # interception, fault injection, throttling
+│   ├── test_auth_state.py       # saved login (needs a real account)
+│   └── unit/                    # framework rules: page-object layout, traceability (no browser)
 └── docs/Unit2_Playwright_vi.md, Unit2_Playwright_en.md
 ```
 
@@ -44,22 +52,34 @@ ATEST03-unit2/
 ```bash
 pip install -r requirements.txt
 playwright install chromium
-pytest                               # 25 tests: 21 Unit 1 scenarios + 4 network tests
+pytest                               # 22 browser tests + 36 framework tests; manual/data_creating/auth excluded
 pytest -m smoke
-pytest -m critical                   # every Critical-risk test (Gherkin + plain tests)
+pytest -m critical                   # every Critical-risk test
+pytest -m add_to_cart                # every test of one requirement
 pytest -n auto                       # parallel
 pytest -m auth                       # needs SAUCE_EMAIL / SAUCE_PASSWORD
-pytest -m cart --headed --slowmo 300
+pytest tests/test_cart.py --headed --slowmo 300
 playwright show-trace test-results/<test>/trace.zip
 ```
 
-Outputs: `reports/report.html`, `reports/junit.xml`, `test-results/` (trace, screenshot, video of failed tests). Never commit `.auth/`.
+## Reports
 
-Verified against a local mock with the standard Shopify page structure. If a locator differs on the live theme, fix it in `pages/` only.
+Every run writes:
 
-## Keeping the features in sync with Unit 1
+| Output | Path | For |
+| --- | --- | --- |
+| HTML report | `reports/report.html` | trainer, BA, PO |
+| JUnit XML | `reports/junit.xml` | CI test tab |
+| Traceability matrix | `reports/traceability.md`, `.csv` | requirement → tests → PASS / FAIL / NOT RUN / NO TEST |
+| Trace, screenshot, video of failed tests | `test-results/` | debugging |
 
-`tests/features/` and `dataset/products.json` are copies of the [ATEST03-unit1](https://github.com/TrangTT4T/ATEST03-unit1) repository. When a scenario changes there, copy the file here.
+A requirement is FAIL if any of its tests failed, PASS if every test that ran passed, NOT RUN if none ran (deselected `manual` / `data_creating` / `auth` tests are listed, not hidden), NO TEST if no test carries its marker. The framework tests in `tests/unit/` fail when a test has no or two requirement markers, or a requirement has no test; `--strict-markers` rejects a marker typo such as `add_to_card`.
+
+## Known limits of the public demo store
+
+- **Login and registration forms are MANUAL** (`@pytest.mark.manual`): the store's bot protection (CAPTCHA) stops them — no request is sent and no error is shown — so a wrong-password test could only fail. The tests are complete; run them with `pytest -m manual` in a test environment without CAPTCHA. Opening the password-reset form is automated.
+- **The theme needs jQuery from `ajax.googleapis.com`**: `block_third_party` allows that one host, otherwise the product page never renders its "Sold Out" button and Add to Cart falls back to a full-page form post. Tracking hosts stay blocked.
+- Never commit `.auth/`.
 
 ## ATEST03 course repositories
 
@@ -68,7 +88,7 @@ One repository per unit:
 | Unit | Days | Topic | Repository |
 | --- | --- | --- | --- |
 | 1 | 1–4 | BDD automation design and framework practices (behave + Selenium) | [ATEST03-unit1](https://github.com/TrangTT4T/ATEST03-unit1) |
-| 2 | 5–8 | Playwright end-to-end automation (pytest + pytest-bdd) | **ATEST03-unit2** (this repository) |
+| 2 | 5–8 | Playwright end-to-end automation (pytest + Playwright) | **ATEST03-unit2** (this repository) |
 | 3 | 9–12 | Mobile (Appium) and asynchronous systems | [ATEST03-unit3](https://github.com/TrangTT4T/ATEST03-unit3) |
 | 4 | 13–18 | Containers, AWS cloud execution, performance (JMeter), CI/CD | [ATEST03-unit4](https://github.com/TrangTT4T/ATEST03-unit4) |
 | 5 | 19–22 | Mock project: Swag Labs, end to end, without AWS | [ATEST03-unit5-mock](https://github.com/TrangTT4T/ATEST03-unit5-mock) |

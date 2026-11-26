@@ -2,10 +2,11 @@
 from .base_page import BasePage, money_to_float
 from .cart_page import CartPage
 from .catalog_page import CatalogPage
+from .checkout_page import CheckoutPage
 from .login_page import LoginPage
 from .product_page import ProductPage
 from .register_page import RegisterPage
 from .search_page import SearchPage
 
-__all__ = ["BasePage", "CatalogPage", "ProductPage", "CartPage", "LoginPage", "RegisterPage", "SearchPage",
+__all__ = ["BasePage", "CatalogPage", "CheckoutPage", "ProductPage", "CartPage", "LoginPage", "RegisterPage", "SearchPage",
            "money_to_float"]

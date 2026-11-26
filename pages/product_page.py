@@ -1,6 +1,4 @@
 """Product detail page: /products/<handle>"""
-import re
-
 from playwright.sync_api import Locator
 
 from .base_page import BasePage
@@ -12,7 +10,15 @@ class ProductPage(BasePage):
 
     @property
     def title(self) -> Locator:
-        return self.page.locator(self._title).first
+        return self.page.locator(self._title)
+
+    @property
+    def price(self) -> Locator:
+        return self.page.locator(self._price)
+
+    @property
+    def sold_out_button(self) -> Locator:
+        return self.page.locator(self._sold_out_button)
 
     @property
     def add_form(self) -> Locator:
@@ -22,32 +28,31 @@ class ProductPage(BasePage):
     def add_button(self) -> Locator:
         return self.add_form.locator(self._add_button).first
 
-    def can_add_to_cart(self) -> bool:
-        if self.add_button.count() == 0 or self.add_button.is_disabled():
-            return False
-        label = (self.add_button.get_attribute("value") or self.add_button.inner_text() or "").lower()
-        return "sold out" not in label and "unavailable" not in label
-
     def add_to_cart(self, quantity: int = 1):
         qty = self.add_form.locator(self._quantity)
-        if qty.count():
-            qty.fill(str(quantity))
-            self._submit()
-        else:  # theme without a quantity box: add the product N times
-            url = self.page.url
-            for i in range(quantity):
-                if i:
-                    self.page.goto(url)
-                self._submit()
+        if qty.count() and qty.first.is_visible():
+            qty.first.fill(str(quantity))
+            self._click_add()
+        else:  # theme without a visible quantity box: add the product N times
+            for _ in range(quantity):
+                self._click_add()
 
-    def _submit(self):
-        # Wait on the network call itself, not on a timer (Day 6: network-aware waits).
-        with self.page.expect_response(lambda r: "/cart/add" in r.url):
-            self.submit(self.add_button)
-        self.page.wait_for_url(re.compile(r"/cart"))
+    def _click_add(self):
+        """Add to Cart is AJAX: the theme posts /cart/add.js and stays on the page.
+
+        Wait for the server's answer to THIS click (Day 6: network-aware waits). A navigation or
+        load-state wait would hang or return at once - neither proves that the add finished.
+        """
+        with self.page.expect_response(lambda r: "/cart/add" in r.url and r.request.method == "POST") as answer:
+            self.add_button.click()
+        if not answer.value.ok:
+            raise AssertionError(f"add to cart failed: HTTP {answer.value.status}")
 
     # --- Locators -------------------------------------------------------------
-    _title = "role=heading[level=1]"
+    # itemprop="name" (schema.org markup) is the product name; the shop's first <h1> is its logo.
+    _title = "[itemprop='name']"
+    _price = "#product-price"
+    _sold_out_button = "role=button[name='Sold Out']"
     _add_form = "form[action*='/cart/add']"  # standard Shopify form
     # Inside the add form:
     _add_button = "[type='submit']"

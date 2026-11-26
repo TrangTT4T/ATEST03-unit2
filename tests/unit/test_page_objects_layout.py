@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-PAGES = sorted(p for p in (Path(__file__).resolve().parents[1] / "pages").glob("*.py") if p.name != "__init__.py")
+PAGES = sorted(p for p in (Path(__file__).resolve().parents[2] / "pages").glob("*.py") if p.name != "__init__.py")
 
 
 def layout_problems(source: str) -> list[str]:

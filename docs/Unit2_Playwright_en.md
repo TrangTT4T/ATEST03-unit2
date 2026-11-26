@@ -1,8 +1,8 @@
 # Unit 2 – Playwright End-to-End Automation (Sauce Demo)
 
-pytest + pytest-bdd + Playwright · Application under test: https://sauce-demo.myshopify.com · Code: `ATEST03-unit2/`
+pytest + Playwright (pytest-playwright) · Application under test: https://sauce-demo.myshopify.com · Code: `ATEST03-unit2/`
 
-Unit 2 builds on Unit 1: the same Gherkin feature files, test data and tags run on Playwright (Day 5), then gain tracing, network control, saved login and parallel runs (Day 6), are applied to the prioritised workflows in the lab (Day 7), and are made reliable with failure analysis and flaky-test control (Day 8). Everything runs with the `pytest` command.
+Unit 2 is plain Playwright: it automates the same Unit 1 requirements, risks and test data as pytest tests that drive page objects, with no Gherkin layer (BDD is Unit 1's subject; BDD on top of Playwright is the mock project in Unit 5). The tests are built on Day 5, then gain tracing, network control, saved login and parallel runs (Day 6), are applied to the prioritised workflows in the lab (Day 7), and are made reliable with failure analysis and flaky-test control (Day 8). Everything runs with the `pytest` command.
 
 | Day | Content | LO | Delivery | Minutes | Format |
 | --- | --- | --- | --- | --- | --- |
@@ -16,17 +16,20 @@ Contents: Day 5 – Architecture · Day 6 – Tracing, network, auth, parallel �
 
 ```text
 ATEST03-unit2/
-├── pytest.ini                   # base_url, features folder, tracing, reports, markers
+├── pytest.ini                   # base_url, tracing, reports, markers (--strict-markers)
 ├── requirements.txt
 ├── dataset/products.json        # same test data as Unit 1
-├── pages/                       # Playwright Page Objects (ported from Unit 1)
+├── dataset/requirements.json    # the Unit 1 requirements: marker -> REQ id, title, risk
+├── helper_utility/traceability.py   # requirement matrix (pure logic)
+├── pages/                       # Playwright Page Objects (ported from Unit 1): one class per file
 └── tests/
-    ├── features/                # the Unit 1 Gherkin files, unchanged
-    ├── steps/shop_steps.py      # the Unit 1 step sentences on Playwright
     ├── conftest.py              # fixtures: data, isolation, network control, auth state
-    ├── test_bdd_features.py     # runs every feature file (pytest-bdd)
+    ├── traceability_plugin.py   # reports/traceability.md and .csv
+    ├── test_cart.py  test_checkout.py  test_catalog.py
+    ├── test_login.py test_register.py  test_search.py   # one file per area, one marker per requirement
     ├── test_network.py          # interception, request assertion, fault injection, throttling
-    └── test_auth_state.py       # saved login + isolation check
+    ├── test_auth_state.py       # saved login + isolation check
+    └── unit/                    # framework rules (no browser): page-object layout, traceability
 ```
 
 ---
@@ -35,17 +38,17 @@ ATEST03-unit2/
 
 Unit 2 · LO3 · Concept/Lecture · 120 min · Virtual
 
-Unit 2 keeps what Unit 1 built and changes the engine: the same 6 feature files and tags now run on Playwright, and pytest fixtures replace behave hooks.
+Unit 2 keeps WHAT Unit 1 tests (requirements, risks, data) and changes HOW: plain pytest tests drive Playwright page objects, markers replace Gherkin tags, and pytest fixtures replace behave hooks.
 
 ### 1. What is inherited from Unit 1, what is new
 
 | Unit 1 (behave + Selenium) | Unit 2 (pytest + Playwright) | Status |
 | --- | --- | --- |
-| `tests/features/*.feature` | Same files in `tests/features/`, run by `tests/test_bdd_features.py` (pytest-bdd) | Inherited unchanged |
+| `tests/features/*.feature` (14 scenarios) | One pytest test per scenario in `tests/test_<area>.py`; Examples tables become `@pytest.mark.parametrize` | Rewritten as plain tests |
+| Requirement tags `@add_to_cart` … | Markers `@pytest.mark.add_to_cart` …; registry `dataset/requirements.json` (same file) | Inherited |
 | `dataset/products.json` | Same file | Inherited |
-| Tags `@cart`, `@critical`, `@smoke`, `@negative` | Become pytest markers: `pytest -m smoke`, `pytest -m cart` | Inherited |
+| Tags `@critical`, `@smoke`, `@negative` | Same names as pytest markers: `pytest -m smoke`; the area is the file: `pytest tests/test_cart.py` | Inherited |
 | Page Objects (`pages/`) | Same class names, Playwright `Locator` instead of `WebElement` | Ported |
-| Step definitions (`tests/steps/`) | `tests/steps/shop_steps.py`, same sentences | Ported |
 | `tests/environment.py` hooks | `tests/conftest.py` fixtures | Replaced |
 | `WebDriverWait` explicit waits | Auto-waiting actions + retrying `expect()` | Replaced |
 | Fresh browser per scenario | Fresh **browser context** per test (much cheaper) | Improved |
@@ -68,11 +71,11 @@ A context costs milliseconds, so every test gets a clean cart without restarting
 
 | Priority | Locator | Example in `pages/` |
 | --- | --- | --- |
-| 1 | Role + accessible name | `page.get_by_role("link", name=re.compile(r"My Cart \(\d+\)"))` |
-| 2 | Role + level | `page.get_by_role("heading", level=1)` (product title) |
-| 3 | Text | `page.get_by_text("£60.00")` |
+| 1 | Role + accessible name | `role=link[name=/My Cart \(\d+\)/]` (mini cart) |
+| 2 | Semantic attribute | `[itemprop='name']` (product title: the first `<h1>` on the page is the logo) |
+| 3 | Text | `text=No results found for` |
 | 4 | Stable attribute / form action | `form[action*='/cart/add']`, `input[name^='updates']` |
-| 5 | Filtered locator | `locator("tr, li, div").filter(has=get_by_role("link", name="Striped top"))` |
+| 5 | Filtered locator | `#cart` rows `.filter(has=role=link[name='Striped top' s])` — scoped to `#cart`: every page also holds a hidden mini-cart with the same rows |
 | Never | Position | `:nth-child`, `xpath=(//a)[3]` |
 
 ### 4. Fixtures (`tests/conftest.py`)
@@ -83,7 +86,7 @@ A context costs milliseconds, so every test gets a clean cart without restarting
 | `browser_context_args` | session | `_make_driver()` options | Viewport 1366×900, locale en-GB |
 | `products` | session | `before_all` loading JSON | Reads `dataset/products.json` |
 | `shop` | test | `helper_utility/helpers.page()` | All Page Objects bound to this test's page |
-| `cart_with` | test | Given step code | Factory: `cart_with("Noir jacket", 2)` |
+| `cart_with` | test | `Given ... in the cart` step | Factory: `cart_with("Noir jacket", 2)` |
 | `block_third_party` | test, autouse | — | Network control (Day 6) |
 | `customer_state` | session | — | Saved login (Day 6) |
 
@@ -103,11 +106,15 @@ def cart_with(shop, products):
 `expect()` retries until the condition holds or the timeout (5 s) ends, so no explicit waits are written:
 
 ```python
-@then(parsers.re(r"the cart should contain (?P<count>\d+) items?"), converters={"count": int})
-def cart_count(shop, count):
+@pytest.mark.critical
+@pytest.mark.smoke
+@pytest.mark.add_to_cart                      # requirement REQ-01
+def test_add_an_in_stock_product_to_the_cart(shop, products):
+    shop.product.open_product(products["Grey jacket"]["handle"])
+    shop.product.add_to_cart(1)               # waits for the AJAX /cart/add answer
     cart = shop.cart.open()
-    expect(cart.mini_cart).to_have_text(re.compile(rf"My Cart \({count}\)"))
-    assert cart.total_quantity() == count
+    expect(cart.mini_cart).to_have_text(re.compile(r"My Cart \(1\)"))
+    assert cart.total() == money_to_float("£55.00")
 ```
 
 | Unit 1 | Unit 2 |
@@ -126,8 +133,8 @@ def cart_count(shop, count):
 cd ATEST03-unit2
 pip install -r requirements.txt
 playwright install chromium
-pytest --collect-only -q          # 25 tests: 21 from the Unit 1 features + 4 Playwright-only
-pytest -m smoke                   # same smoke tags as Unit 1
+pytest --collect-only -q          # 28 browser tests (22 in the default run) + 36 framework tests
+pytest -m smoke                   # same smoke markers as Unit 1's tags
 pytest --headed --slowmo 300      # watch it run
 ```
 
@@ -203,7 +210,7 @@ Allowed: the store host and `*.shopify.com`, `*.myshopify.com`, `*.shopifycdn.co
 | `test_failed_add_to_cart_request_does_not_add_the_product` | `page.route(...).fulfill(status=500)`: fault injection | R01 |
 | `test_catalog_loads_on_a_slow_network` | Chromium CDP `Network.emulateNetworkConditions` (400 ms latency) | R05 |
 
-Plain tests carry the same risk-level markers as the Gherkin tags (`@pytest.mark.critical`), so `pytest -m critical` selects both.
+Network tests carry a risk marker and a requirement marker like every other test (`@pytest.mark.critical`, `@pytest.mark.add_to_cart`).
 
 ```python
 page.route("**/cart/add*", lambda route: route.fulfill(status=500, body="Internal Server Error"))
@@ -259,8 +266,9 @@ Safe because every test has its own context (Day 5) and no test depends on anoth
 | HTML | pytest-html (`--html` in `pytest.ini`) | `reports/report.html` |
 | JUnit XML | `--junitxml` | `reports/junit.xml` |
 | Trace, screenshot, video | pytest-playwright | `test-results/` |
+| Traceability matrix | `tests/traceability_plugin.py` | `reports/traceability.md`, `.csv` |
 
-Selecting by marker replaces a separate traceability report: `pytest -m critical --collect-only -q` lists every Critical-risk test, Gherkin or plain; `pytest -m cart --collect-only -q` lists one feature area.
+The matrix answers "which requirement is met?": one row per requirement (REQ-01 … REQ-08) with its tests and a status — FAIL if a test failed, PASS if every test that ran passed, NOT RUN if none ran (deselected `manual` / `data_creating` / `auth` tests are listed, not hidden), NO TEST if no test carries the marker. It is built from the requirement markers, also with `pytest -n auto` (workers send their test lists to the controller). `pytest -m add_to_cart` runs one requirement; `pytest -m critical --collect-only -q` lists every Critical-risk test.
 
 ### 6. Review questions
 
@@ -275,32 +283,32 @@ Selecting by marker replaces a separate traceability report: `pytest -m critical
 
 Unit 2 · LO3 · Assignment/Lab · 150 min · Hybrid
 
-The lab automates the Unit 1 risk priorities on Playwright: 25 tests in the default run (21 Unit 1 scenarios + 4 network tests), plus 2 auth tests with credentials.
+The lab automates the Unit 1 risk priorities on Playwright: 22 browser tests in the default run, plus 2 auth tests with credentials, 3 `manual` tests (CAPTCHA) and 1 `data_creating` test.
 
 ### 1. Prioritised workflows (from the Unit 1 risk table)
 
 | Priority | Workflow | Risk | Tests | Unit 2 technique |
 | --- | --- | --- | --- | --- |
-| P1 | Add to cart, totals, change, remove | R01 Critical (20) | 5 scenarios from `cart.feature` + 2 network tests | `cart_with` fixture, `expect_request`, 500 fault injection |
-| P1 | Cart → checkout | R02 Critical (15) | 1 scenario from `checkout.feature` | `expect(page).to_have_url` |
-| P1 | Product detail, sold-out | R03 High (12) | 2 scenarios from `product.feature` | role locators |
-| P1 | Login, password reset, saved session | R04 High (12) | 3 scenarios + 2 auth tests | `customer_state` storage state |
-| P1 | Catalog prices and stock | R05 High (12) | 7 Examples rows + slow-network test | CDP throttling |
-| P2 | Registration validation | R06 Medium (9) | 1 scenario (+1 `@data-creating`) | — |
-| P2 | Search | R07 Medium (9) | 2 scenarios | — |
+| P1 | Add to cart, totals, change, remove | R01 Critical (20) | 5 tests in `test_cart.py` + 3 network tests | `cart_with` fixture, `expect_request`, 500 fault injection |
+| P1 | Cart → checkout | R02 Critical (15) | 1 test in `test_checkout.py` | `expect(page).to_have_url` |
+| P1 | Product detail, sold-out | R03 High (12) | 2 tests in `test_catalog.py` | `[itemprop='name']`, `to_be_disabled()` |
+| P1 | Login, password reset, saved session | R04 High (12) | password reset + 2 auth tests; 2 invalid-login tests are `manual` (CAPTCHA) | `customer_state` storage state |
+| P1 | Catalog prices and stock | R05 High (12) | 7 parametrized cases (one per product) + slow-network test | `parametrize`, CDP throttling |
+| P2 | Registration validation | R06 Medium (9) | 1 `manual` test (CAPTCHA) + 1 `data_creating` test | — |
+| P2 | Search | R07 Medium (9) | 2 tests in `test_search.py` | no-results message |
 | P2 | Third-party failure does not break shopping | R09 Medium (6) | 1 network test | `block_third_party` route |
 
 ### 2. Files
 
 | File | Role |
 | --- | --- |
-| `tests/test_bdd_features.py` | `scenarios(".")` runs every file in `tests/features/` |
-| `tests/steps/shop_steps.py` | Playwright implementation of every Unit 1 step |
+| `tests/test_<area>.py` | One file per area; every test has a risk, a suite and a requirement marker |
+| `tests/traceability_plugin.py` | Requirement matrix of every run |
 | `tests/conftest.py` | Fixtures, network control, auth state |
 | `tests/test_network.py` | Interception, request assertion, fault injection, throttling |
 | `tests/test_auth_state.py` | Saved login and isolation check |
 | `pages/` | Page Objects ported from Unit 1 |
-| `pytest.ini` | base URL, tracing, reports, default marker filter, features folder |
+| `pytest.ini` | base URL, tracing, reports, default marker filter, marker list (`--strict-markers`) |
 
 ### 3. Run the lab
 
@@ -320,18 +328,19 @@ pytest -m "critical and not negative"
 
 | Check | Result |
 | --- | --- |
-| `pytest` | 25 passed, 3 deselected (`@auth` ×2, `@data-creating` ×1) |
-| `pytest -n auto` | 25 passed |
+| `pytest` | 58 passed (22 browser + 36 framework), 6 deselected (`auth` ×2, `manual` ×3, `data_creating` ×1) |
+| `pytest -n auto` | 58 passed; same `reports/traceability.csv` as the serial run |
+| `reports/traceability.md` | every requirement PASS, except REQ-07 NOT RUN (both registration tests excluded) |
 | `pytest -m auth` (with an account) | 2 passed |
 | Failed test | `test-results/<test>/trace.zip`, screenshot, video |
 
-Verified against a local Shopify-structured mock store. Against the live store, check locators first (Unit 1 finding F2).
+Verified on the live store (2026-11-25). Two things the live store taught the suite: the theme needs jQuery from `ajax.googleapis.com` (blocked, the "Sold Out" button never renders and Add to Cart turns into a full-page post), and its CAPTCHA stops the login and registration forms.
 
 ### 5. Lab tasks
 
 1. Add a fault-injection test: the cart page answers 503. What should the customer see? Write the assertion.
 2. Make `test_catalog_loads_on_a_slow_network` fail by lowering the timeout to 1 s, then open its trace and find the slow request.
-3. Add a scenario to `tests/features/search.feature`. Which code had to change? (Answer: none, unless the step sentence is new.)
+3. Add a search test for "sandals" with the right requirement and risk markers. Run `pytest` and check that `reports/traceability.md` lists it under REQ-08.
 4. Run `pytest -n auto` three times and compare durations with the serial run.
 
 ---
@@ -346,7 +355,7 @@ Day 8 closes both units: part A revises Unit 2 against Unit 1, part B makes the 
 
 | Topic | Unit 1 (Day 1–4) | Unit 2 (Day 5–7) |
 | --- | --- | --- |
-| Specification | Gherkin features, tags | Same files, run by pytest-bdd |
+| Specification | Gherkin features, tags | Plain pytest tests; markers for requirement, risk and suite |
 | Engine | Selenium WebDriver | Playwright (auto-wait, contexts) |
 | Setup / teardown | behave hooks | pytest fixtures (`conftest.py`) |
 | Isolation | New browser per scenario | New context per test |
@@ -355,7 +364,7 @@ Day 8 closes both units: part A revises Unit 2 against Unit 1, part B makes the 
 | Network | Not controlled | Block, assert, fault-inject, throttle |
 | Login | UI login each time | Saved storage state |
 | Speed | Serial | `-n auto` parallel |
-| Selection | `behave --tags=@cart` | `pytest -m cart` |
+| Selection | `behave --tags=@cart` | `pytest tests/test_cart.py`, `pytest -m add_to_cart` |
 
 Revision questions:
 
@@ -376,7 +385,7 @@ test fails
  │     └─ Network tab: status codes, slow or failed requests
  ├─ 3. classify
  │     ├─ product defect   → wrong price, wrong total, error page → raise a bug with the trace
- │     ├─ test defect      → locator changed, wrong assumption → fix in pages/ or tests/steps/
+ │     ├─ test defect      → locator changed, wrong assumption → fix in pages/ or the test
  │     └─ environment      → store down, captcha, network → retry later, mark @manual if persistent
  └─ 4. if it passes on rerun without a change → flaky: see B2
 ```
@@ -422,9 +431,9 @@ Typical root causes and the fix used in this code:
 Quick searches (PowerShell; use `grep -rnE` in Git Bash):
 
 ```powershell
-Select-String -Path tests\*.py, tests\steps\*.py, pages\*.py -Pattern 'wait_for_timeout|time\.sleep'   # fixed waits
-Select-String -Path tests\*.py, tests\steps\*.py, pages\*.py -Pattern 'force=True'                     # forced clicks
-Select-String -Path tests\*.py, tests\steps\*.py -Pattern ':nth-child|nth=|\.nth\('                     # positional selectors
+Select-String -Path tests\*.py, pages\*.py -Pattern 'wait_for_timeout|time\.sleep'   # fixed waits
+Select-String -Path tests\*.py, pages\*.py -Pattern 'force=True'                     # forced clicks
+Select-String -Path tests\*.py -Pattern ':nth-child|nth=|\.nth\('                     # positional selectors
 ```
 
 | Rule | Why |
@@ -433,12 +442,12 @@ Select-String -Path tests\*.py, tests\steps\*.py -Pattern ':nth-child|nth=|\.nth
 | No `force=True` | Hides elements that a user could not click |
 | No positional selectors in tests | Breaks when the layout changes |
 | No raw CSS/XPath in tests | Locators belong in `pages/` |
-| Every plain test has a risk-level marker (`critical`, `high`, `medium`) | Keeps `pytest -m critical` complete |
+| Every test has a risk-level marker (`critical`, `high`, `medium`) and exactly one requirement marker | Keeps `pytest -m critical` and the traceability matrix complete (`tests/unit/test_traceability.py`) |
 
 #### B4. Maintainability criteria (checklist)
 
-- [ ] Every feature area and risk level has at least one test: `pytest -m cart --collect-only -q`, `pytest -m critical --collect-only -q`
-- [ ] Gherkin stays declarative (no URL, CSS, click or wait in `tests/features/`)
+- [ ] Every requirement has a test: `reports/traceability.md` shows no NO TEST row (`tests/unit/test_traceability.py` enforces it)
+- [ ] Tests read like the requirement: actions and checks through page objects, no URL or CSS in tests
 - [ ] No locator outside `pages/`
 - [ ] No fixed waits, no `force=True` (B3 searches return nothing)
 - [ ] 0 flaky tests in 3 consecutive runs (B2)
@@ -451,5 +460,5 @@ Select-String -Path tests\*.py, tests\steps\*.py -Pattern ':nth-child|nth=|\.nth
 | Check | Result on the mock store |
 | --- | --- |
 | B3 searches | no matches |
-| 3 runs of `pytest` | 25 passed each time, 0 flaky |
+| 3 runs of `pytest` | 58 passed each time, 0 flaky |
 | Forced failure | `trace.zip`, `test-failed-1.png`, `video.webm` in `test-results/` |
