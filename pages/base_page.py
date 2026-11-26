@@ -32,24 +32,6 @@ from playwright.sync_api import Locator, Page, Response, expect
 from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 
 MONEY = re.compile(r"£\s?([\d,]+\.\d{2})")
-PLAYWRIGHT_ENGINES = ("css", "xpath", "text", "role", "id", "data-testid")
-
-
-def _quoted(text: str) -> str:
-    return "'" + text.replace("\\", "\\\\").replace("'", "\\'") + "'"
-
-
-def _regex(text: str) -> str:
-    return re.escape(text).replace("/", "\\/")
-
-
-UNIT1_STRATEGIES: dict[str, Callable[[str], str]] = {
-    "name": lambda v: f"css=[name={_quoted(v)}]",
-    "tag": lambda v: f"css={v}",
-    "class": lambda v: f"css=.{v}",
-    "link": lambda v: f"role=link[name={_quoted(v)} s]",
-    "partial_link": lambda v: f"role=link[name=/{_regex(v)}/]",  # contains, case-sensitive
-}
 
 
 def parse_locator(locator: str) -> str:
@@ -58,14 +40,29 @@ def parse_locator(locator: str) -> str:
     :param locator: a locator string, with or without a strategy prefix
     :return: a Playwright selector
     """
+
+    def quoted(text: str) -> str:
+        return "'" + text.replace("\\", "\\\\").replace("'", "\\'") + "'"
+
+    def regex(text: str) -> str:
+        return re.escape(text).replace("/", "\\/")
+
+    playwright_engines = ("css", "xpath", "text", "role", "id", "data-testid")  # passed through
+    unit1_strategies: dict[str, Callable[[str], str]] = {  # translated to a Playwright selector
+        "name": lambda v: f"css=[name={quoted(v)}]",
+        "tag": lambda v: f"css={v}",
+        "class": lambda v: f"css=.{v}",
+        "link": lambda v: f"role=link[name={quoted(v)} s]",  # exact
+        "partial_link": lambda v: f"role=link[name=/{regex(v)}/]",  # contains, case-sensitive
+    }
     if not isinstance(locator, str) or not locator.strip():
         raise ValueError(f"A locator is a non-empty string such as 'css=#cart', got {locator!r}")
     prefix, separator, value = locator.partition("=")
     prefix = prefix.strip()
-    if separator and (prefix in PLAYWRIGHT_ENGINES or prefix in UNIT1_STRATEGIES):
+    if separator and (prefix in playwright_engines or prefix in unit1_strategies):
         if not value.strip():
             raise ValueError(f"Locator {locator!r} has a strategy but no value")
-        return f"{prefix}={value.strip()}" if prefix in PLAYWRIGHT_ENGINES else UNIT1_STRATEGIES[prefix](value.strip())
+        return f"{prefix}={value.strip()}" if prefix in playwright_engines else unit1_strategies[prefix](value.strip())
     if locator.startswith(("//", "(/", "./")):
         return f"xpath={locator}"
     return f"css={locator}"
