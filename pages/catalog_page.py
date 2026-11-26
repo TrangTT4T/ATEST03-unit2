@@ -13,7 +13,7 @@ class CatalogPage(BasePage):
     ############################################################################
     def tile(self, handle: str) -> Locator:
         """The tile of one product: a link to /products/<handle> with name, price and "Sold Out"."""
-        return self.page.locator(self._tile.format(handle=handle)).first
+        return self.find_element(self.locator(self._tile, handle=handle), first=True)
 
     # --- Locators -------------------------------------------------------------
-    _tile = "a[href*='/products/{handle}']"
+    _tile = "css=a[href*='/products/{handle}']"

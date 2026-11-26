@@ -15,7 +15,7 @@ class CheckoutPage(BasePage):
     ############################################################################
     def line_item(self, product_name: str) -> Locator:
         """The order-summary line of ``product_name``."""
-        return self.page.locator(self._line_item.format(name=product_name)).first
+        return self.find_element(self.locator(self._line_item, name=product_name), first=True)
 
     # --- Locators -------------------------------------------------------------
     _line_item = "text={name}"

@@ -14,22 +14,24 @@ class RegisterPage(BasePage):
     @property
     def form(self) -> Locator:
         """The registration form (the one with an email field)."""
-        return self.page.locator(self._form).filter(has=self.page.locator(self._field.format(name="email"))).first
+        email_field = self.find_element(self.locator(self._field, name="email"))
+        return self.find_element(self._form).filter(has=email_field).first
 
     def register(self, first: str, last: str, email: str, password: str):
         """Fill in the four fields, click Create and wait for the next page."""
-        for field, value in (("first_name", first), ("last_name", last), ("email", email), ("password", password)):
-            self.form.locator(self._field.format(name=field)).fill(value)
-        self.submit(self.form.locator(self._create_button).first)
+        for field, value in (("first_name", first), ("last_name", last), ("email", email)):
+            self.type_text(self.form, self.locator(self._field, name=field), text=value)
+        self.type_text(self.form, self.locator(self._field, name="password"), text=password, secret=True)
+        self.click_and_wait_for_new_page(self.form, self._create_button)
 
     @property
     def error(self) -> Locator:
         """The form's error message (e.g. email missing)."""
-        return self.page.locator(self._errors).first
+        return self.find_element(self._errors, first=True)
 
     # --- Locators -------------------------------------------------------------
-    _form = "form[action*='/account']"
+    _form = "css=form[action*='/account']"
     # Inside the form:
-    _field = "input[name='customer[{name}]']"
-    _create_button = "[type='submit']"
-    _errors = ".errors, .form-error, [role='alert']"
+    _field = "name=customer[{name}]"
+    _create_button = "css=[type='submit']"
+    _errors = "css=.errors, .form-error, [role='alert']"

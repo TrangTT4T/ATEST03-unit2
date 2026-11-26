@@ -12,13 +12,13 @@ class SearchPage(BasePage):
     @property
     def result_links(self) -> Locator:
         """The links to the products found."""
-        return self.page.locator(self._result_links)
+        return self.find_element(self._result_links)
 
     @property
     def no_results_message(self) -> Locator:
         """The "No results found for ..." message."""
-        return self.page.locator(self._no_results_message)
+        return self.find_element(self._no_results_message)
 
     # --- Locators -------------------------------------------------------------
-    _result_links = "a[href*='/products/']"
+    _result_links = "css=a[href*='/products/']"
     _no_results_message = "text=No results found for"

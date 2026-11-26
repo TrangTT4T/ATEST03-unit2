@@ -21,12 +21,12 @@ class CartPage(BasePage):
     @property
     def root(self) -> Locator:
         """The cart form (#cart); every other locator of this page is inside it."""
-        return self.page.locator(self._root)
+        return self.find_element(self._root)
 
     @property
     def quantity_inputs(self) -> Locator:
         """The quantity box of every cart line."""
-        return self.root.locator(self._quantity_inputs)
+        return self.find_element(self._root, self._quantity_inputs)
 
     def total_quantity(self) -> int:
         """Sum of the quantity boxes: the number of items in the cart."""
@@ -35,16 +35,17 @@ class CartPage(BasePage):
 
     def line_input(self, product_name: str) -> Locator:
         """The quantity box of the line of ``product_name``."""
-        row = (self.root.locator(self._row)
-               .filter(has=self.page.locator(self._product_link.format(name=product_name)))
-               .filter(has=self.page.locator(self._quantity_inputs)).last)  # has=: relative to the row
-        return row.locator(self._quantity_inputs).first
+        product_link = self.find_element(self.locator(self._product_link, name=product_name))
+        quantity_box = self.find_element(self._quantity_inputs)
+        row = self.find_element(self._root, self._row).filter(has=product_link).filter(has=quantity_box).last
+        return self.find_element(row, self._quantity_inputs, first=True)  # has=: relative to the row
 
     def set_quantity(self, product_name: str, quantity: int):
         """Type ``quantity`` in the line of ``product_name`` and click Update."""
         # Quantity 0 + Update removes the line (standard Shopify behaviour).
+        self.logger.info("Set quantity of %s to %s", product_name, quantity)
         self.line_input(product_name).fill(str(quantity))
-        self.submit(self.root.locator(self._update_button).first)
+        self.click_and_wait_for_new_page(self._root, self._update_button)
 
     def remove(self, product_name: str):
         """Remove the line of ``product_name`` (quantity 0 + Update)."""
@@ -56,7 +57,7 @@ class CartPage(BasePage):
     ############################################################################
     def total(self) -> float:
         """The cart total in pounds, e.g. 55.0."""
-        text = self.root.inner_text()
+        text = self.get_text(self._root)
         match = TOTAL.search(text)
         if match:
             return float(match.group(2).replace(",", ""))
@@ -64,15 +65,15 @@ class CartPage(BasePage):
 
     def checkout(self):
         """Click Check Out and wait for the checkout page."""
-        self.submit(self.root.locator(self._checkout_button).first)
-        self.page.wait_for_url(re.compile(r"checkout"))
+        self.click_and_wait_for_new_page(self._root, self._checkout_button)
+        self.wait_for_url_contains("checkout")
 
     # --- Locators -------------------------------------------------------------
-    _root = "#cart"
+    _root = "css=#cart"
     # Inside #cart:
-    _quantity_inputs = "input[name^='updates']"
+    _quantity_inputs = "css=input[name^='updates']"
     # A cart line: the row that holds both the product link and a quantity box.
-    _row = "tr, li, div"
+    _row = "css=tr, li, div"
     _product_link = "role=link[name='{name}' s]"  # exact name
-    _update_button = "[name='update']"
-    _checkout_button = "[name='checkout']"
+    _update_button = "name=update"
+    _checkout_button = "name=checkout"
