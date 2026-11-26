@@ -19,7 +19,7 @@ Unit 2 is **plain Playwright**: tests are pytest functions that drive page objec
 | Day | Topic | Section in the unit document | Code used |
 | --- | --- | --- | --- |
 | 5 | Architecture, contexts, locators, fixtures, assertions, isolation | Day 5 section | `pages/`, `tests/conftest.py`, `tests/test_cart.py` … |
-| 6 | Tracing, network interception, auth state, parallel, reporting | Day 6 section | `pytest.ini`, `tests/test_network.py`, `tests/test_auth_state.py`, `tests/traceability_plugin.py` |
+| 6 | Tracing, network interception, auth state, parallel, reporting | Day 6 section | `pytest.ini`, `tests/test_network.py`, `tests/test_auth_state.py` |
 | 7 | Lab: prioritised end-to-end workflows | Day 7 section | full suite |
 | 8 | Revision + reliability, flaky control, stability | Day 8 section | repeated runs, `pytest-rerunfailures`, trace viewer |
 
@@ -30,11 +30,9 @@ ATEST03-unit2/
 ├── dataset/
 │   ├── products.json            # Unit 1 test data
 │   └── requirements.json        # Unit 1 requirements: marker -> REQ id, title, risk
-├── helper_utility/traceability.py   # the requirement matrix (pure logic)
 ├── pages/                       # Playwright Page Objects: one class per file
 ├── tests/
 │   ├── conftest.py              # fixtures, network control, auth state
-│   ├── traceability_plugin.py   # writes reports/traceability.md and .csv
 │   ├── test_cart.py             # @add_to_cart, @update_cart        (Critical)
 │   ├── test_checkout.py         # @start_checkout                   (Critical)
 │   ├── test_catalog.py          # @browse_catalog, @product_details (High)
@@ -43,7 +41,7 @@ ATEST03-unit2/
 │   ├── test_search.py           # @search_products                  (Medium)
 │   ├── test_network.py          # interception, fault injection, throttling
 │   ├── test_auth_state.py       # saved login (needs a real account)
-│   └── unit/                    # framework rules: page-object layout, traceability (no browser)
+│   └── unit/                    # framework rules: page-object layout, markers (no browser)
 └── docs/Unit2_Playwright_vi.md, Unit2_Playwright_en.md
 ```
 
@@ -52,7 +50,7 @@ ATEST03-unit2/
 ```bash
 pip install -r requirements.txt
 playwright install chromium
-pytest                               # 22 browser tests + 36 framework tests; manual/data_creating/auth excluded
+pytest                               # 22 browser tests + 32 framework tests; manual/data_creating/auth excluded
 pytest -m smoke
 pytest -m critical                   # every Critical-risk test
 pytest -m add_to_cart                # every test of one requirement
@@ -70,10 +68,9 @@ Every run writes:
 | --- | --- | --- |
 | HTML report | `reports/report.html` | trainer, BA, PO |
 | JUnit XML | `reports/junit.xml` | CI test tab |
-| Traceability matrix | `reports/traceability.md`, `.csv` | requirement → tests → PASS / FAIL / NOT RUN / NO TEST |
 | Trace, screenshot, video of failed tests | `test-results/` | debugging |
 
-A requirement is FAIL if any of its tests failed, PASS if every test that ran passed, NOT RUN if none ran (deselected `manual` / `data_creating` / `auth` tests are listed, not hidden), NO TEST if no test carries its marker. The framework tests in `tests/unit/` fail when a test has no or two requirement markers, or a requirement has no test; `--strict-markers` rejects a marker typo such as `add_to_card`.
+Every test carries one requirement marker (`@pytest.mark.add_to_cart` …, registry `dataset/requirements.json`): `pytest -m add_to_cart` runs one requirement, and the markers appear in the HTML report. The framework tests in `tests/unit/` fail when a test has no or two requirement markers, a requirement has no test, or a requirement marker is missing from `pytest.ini`; `--strict-markers` rejects a marker typo such as `add_to_card`.
 
 ## Known limits of the public demo store
 

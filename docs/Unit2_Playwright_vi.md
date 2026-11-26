@@ -20,16 +20,14 @@ ATEST03-unit2/
 ├── requirements.txt
 ├── dataset/products.json        # cùng dữ liệu test với Unit 1
 ├── dataset/requirements.json    # yêu cầu của Unit 1: marker -> mã REQ, tiêu đề, rủi ro
-├── helper_utility/traceability.py   # ma trận truy vết (logic thuần)
 ├── pages/                       # Page Object Playwright (chuyển từ Unit 1): mỗi file một class
 └── tests/
     ├── conftest.py              # fixture: dữ liệu, cô lập, kiểm soát network, đăng nhập
-    ├── traceability_plugin.py   # reports/traceability.md và .csv
     ├── test_cart.py  test_checkout.py  test_catalog.py
     ├── test_login.py test_register.py  test_search.py   # mỗi khu vực một file, mỗi yêu cầu một marker
     ├── test_network.py          # chặn request, kiểm tra request, giả lập lỗi, mạng chậm
     ├── test_auth_state.py       # phiên đăng nhập đã lưu + kiểm tra cô lập
-    └── unit/                    # quy tắc của framework (không mở trình duyệt): cấu trúc page object, truy vết
+    └── unit/                    # quy tắc của framework (không mở trình duyệt): cấu trúc page object, marker
 ```
 
 ---
@@ -133,7 +131,7 @@ def test_add_an_in_stock_product_to_the_cart(shop, products):
 cd ATEST03-unit2
 pip install -r requirements.txt
 playwright install chromium
-pytest --collect-only -q          # 28 test trình duyệt (22 chạy mặc định) + 36 test framework
+pytest --collect-only -q          # 28 test trình duyệt (22 chạy mặc định) + 32 test framework
 pytest -m smoke                   # cùng tag smoke như Unit 1
 pytest --headed --slowmo 300      # xem trình duyệt chạy
 ```
@@ -266,9 +264,8 @@ An toàn vì mỗi test có context riêng (Day 5) và không test nào phụ th
 | HTML | pytest-html (`--html` trong `pytest.ini`) | `reports/report.html` |
 | JUnit XML | `--junitxml` | `reports/junit.xml` |
 | Trace, ảnh, video | pytest-playwright | `test-results/` |
-| Ma trận truy vết | `tests/traceability_plugin.py` | `reports/traceability.md`, `.csv` |
 
-Ma trận trả lời câu hỏi "yêu cầu nào đã đạt?": mỗi yêu cầu (REQ-01 … REQ-08) một dòng, kèm các test và trạng thái: FAIL nếu có test fail, PASS nếu mọi test đã chạy đều pass, NOT RUN nếu không test nào chạy (test `manual` / `data_creating` / `auth` bị lọc vẫn được liệt kê, không bị giấu), NO TEST nếu chưa test nào mang marker đó. Ma trận dựng từ marker yêu cầu, chạy đúng cả với `pytest -n auto` (worker gửi danh sách test về controller). `pytest -m add_to_cart` chạy riêng một yêu cầu; `pytest -m critical --collect-only -q` liệt kê mọi test rủi ro Critical.
+Test nào cũng mang một marker yêu cầu (`@pytest.mark.add_to_cart` …): `pytest -m add_to_cart` chạy riêng một yêu cầu, `pytest -m critical --collect-only -q` liệt kê mọi test rủi ro Critical, và marker hiện trong báo cáo HTML.
 
 ### 6. Câu hỏi ôn tập
 
@@ -303,7 +300,6 @@ Bài lab tự động hóa các ưu tiên rủi ro của Unit 1 trên Playwright
 | File | Vai trò |
 | --- | --- |
 | `tests/test_<khu_vực>.py` | Mỗi khu vực một file; test nào cũng có marker rủi ro, bộ chạy và yêu cầu |
-| `tests/traceability_plugin.py` | Ma trận truy vết của mỗi lần chạy |
 | `tests/conftest.py` | Fixture, kiểm soát network, trạng thái đăng nhập |
 | `tests/test_network.py` | Chặn request, kiểm tra request, giả lập lỗi, mạng chậm |
 | `tests/test_auth_state.py` | Phiên đăng nhập đã lưu và kiểm tra cô lập |
@@ -328,9 +324,8 @@ pytest -m "critical and not negative"
 
 | Kiểm tra | Kết quả |
 | --- | --- |
-| `pytest` | 58 pass (22 trình duyệt + 36 framework), 6 bị lọc (`auth` ×2, `manual` ×3, `data_creating` ×1) |
-| `pytest -n auto` | 58 pass; `reports/traceability.csv` giống hệt lần chạy tuần tự |
-| `reports/traceability.md` | mọi yêu cầu PASS, riêng REQ-07 NOT RUN (cả hai test đăng ký bị lọc) |
+| `pytest` | 54 pass (22 trình duyệt + 32 framework), 6 bị lọc (`auth` ×2, `manual` ×3, `data_creating` ×1) |
+| `pytest -n auto` | 54 pass |
 | `pytest -m auth` (có tài khoản) | 2 pass |
 | Test fail | `test-results/<test>/trace.zip`, ảnh, video |
 
@@ -340,7 +335,7 @@ pytest -m "critical and not negative"
 
 1. Thêm test giả lập lỗi: trang giỏ hàng trả 503. Khách hàng phải thấy gì? Viết assertion.
 2. Làm `test_catalog_loads_on_a_slow_network` fail bằng cách giảm timeout xuống 1 giây, mở trace và tìm request chậm.
-3. Thêm một test tìm "sandals" với đúng marker yêu cầu và rủi ro. Chạy `pytest` và kiểm tra `reports/traceability.md` liệt kê nó dưới REQ-08.
+3. Thêm một test tìm "sandals" với đúng marker yêu cầu và rủi ro. Chạy `pytest -m search_products` và kiểm tra nó chạy cùng các test khác của REQ-08.
 4. Chạy `pytest -n auto` ba lần, so thời gian với chạy tuần tự.
 
 ---
@@ -442,11 +437,11 @@ Select-String -Path tests\*.py -Pattern ':nth-child|nth=|\.nth\('               
 | Không `force=True` | Che đi phần tử mà người dùng không bấm được |
 | Không selector theo vị trí trong test | Hỏng khi bố cục thay đổi |
 | Không CSS/XPath thô trong test | Locator phải nằm trong `pages/` |
-| Test nào cũng có marker mức rủi ro (`critical`, `high`, `medium`) và đúng một marker yêu cầu | Giữ `pytest -m critical` và ma trận truy vết đầy đủ (`tests/unit/test_traceability.py`) |
+| Test nào cũng có marker mức rủi ro (`critical`, `high`, `medium`) và đúng một marker yêu cầu | Giữ `pytest -m critical` và `pytest -m <yêu_cầu>` đầy đủ (`tests/unit/test_markers.py`) |
 
 #### B4. Tiêu chí bảo trì (checklist)
 
-- [ ] Yêu cầu nào cũng có test: `reports/traceability.md` không có dòng NO TEST (`tests/unit/test_traceability.py` kiểm tra)
+- [ ] Yêu cầu nào cũng có test (`tests/unit/test_markers.py` kiểm tra)
 - [ ] Test đọc giống yêu cầu: thao tác và kiểm tra qua page object, không URL hay CSS trong test
 - [ ] Không có locator ngoài `pages/`
 - [ ] Không chờ cố định, không `force=True` (lệnh tìm ở B3 không ra kết quả)
@@ -460,5 +455,5 @@ Select-String -Path tests\*.py -Pattern ':nth-child|nth=|\.nth\('               
 | Kiểm tra | Kết quả trên site giả lập |
 | --- | --- |
 | Lệnh tìm ở B3 | không có kết quả |
-| 3 lần chạy `pytest` | mỗi lần 58 pass, 0 flaky |
+| 3 lần chạy `pytest` | mỗi lần 54 pass, 0 flaky |
 | Cố ý làm fail | `trace.zip`, `test-failed-1.png`, `video.webm` trong `test-results/` |

@@ -24,8 +24,6 @@ from playwright.sync_api import Browser, BrowserContext, Page
 
 from pages import BasePage, CartPage, CatalogPage, CheckoutPage, LoginPage, ProductPage, RegisterPage, SearchPage
 
-pytest_plugins = ["traceability_plugin"]  # reports/traceability.md and .csv
-
 ROOT = Path(__file__).resolve().parent.parent
 DATASET = ROOT / "dataset"  # same file as the ATEST03-unit1 repo: dataset/products.json
 AUTH_FILE = ROOT / ".auth" / "customer.json"

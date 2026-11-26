@@ -20,16 +20,14 @@ ATEST03-unit2/
 ├── requirements.txt
 ├── dataset/products.json        # same test data as Unit 1
 ├── dataset/requirements.json    # the Unit 1 requirements: marker -> REQ id, title, risk
-├── helper_utility/traceability.py   # requirement matrix (pure logic)
 ├── pages/                       # Playwright Page Objects (ported from Unit 1): one class per file
 └── tests/
     ├── conftest.py              # fixtures: data, isolation, network control, auth state
-    ├── traceability_plugin.py   # reports/traceability.md and .csv
     ├── test_cart.py  test_checkout.py  test_catalog.py
     ├── test_login.py test_register.py  test_search.py   # one file per area, one marker per requirement
     ├── test_network.py          # interception, request assertion, fault injection, throttling
     ├── test_auth_state.py       # saved login + isolation check
-    └── unit/                    # framework rules (no browser): page-object layout, traceability
+    └── unit/                    # framework rules (no browser): page-object layout, markers
 ```
 
 ---
@@ -133,7 +131,7 @@ def test_add_an_in_stock_product_to_the_cart(shop, products):
 cd ATEST03-unit2
 pip install -r requirements.txt
 playwright install chromium
-pytest --collect-only -q          # 28 browser tests (22 in the default run) + 36 framework tests
+pytest --collect-only -q          # 28 browser tests (22 in the default run) + 32 framework tests
 pytest -m smoke                   # same smoke markers as Unit 1's tags
 pytest --headed --slowmo 300      # watch it run
 ```
@@ -266,9 +264,8 @@ Safe because every test has its own context (Day 5) and no test depends on anoth
 | HTML | pytest-html (`--html` in `pytest.ini`) | `reports/report.html` |
 | JUnit XML | `--junitxml` | `reports/junit.xml` |
 | Trace, screenshot, video | pytest-playwright | `test-results/` |
-| Traceability matrix | `tests/traceability_plugin.py` | `reports/traceability.md`, `.csv` |
 
-The matrix answers "which requirement is met?": one row per requirement (REQ-01 … REQ-08) with its tests and a status — FAIL if a test failed, PASS if every test that ran passed, NOT RUN if none ran (deselected `manual` / `data_creating` / `auth` tests are listed, not hidden), NO TEST if no test carries the marker. It is built from the requirement markers, also with `pytest -n auto` (workers send their test lists to the controller). `pytest -m add_to_cart` runs one requirement; `pytest -m critical --collect-only -q` lists every Critical-risk test.
+Every test carries one requirement marker (`@pytest.mark.add_to_cart` …): `pytest -m add_to_cart` runs one requirement, `pytest -m critical --collect-only -q` lists every Critical-risk test, and the markers appear in the HTML report.
 
 ### 6. Review questions
 
@@ -303,7 +300,6 @@ The lab automates the Unit 1 risk priorities on Playwright: 22 browser tests in 
 | File | Role |
 | --- | --- |
 | `tests/test_<area>.py` | One file per area; every test has a risk, a suite and a requirement marker |
-| `tests/traceability_plugin.py` | Requirement matrix of every run |
 | `tests/conftest.py` | Fixtures, network control, auth state |
 | `tests/test_network.py` | Interception, request assertion, fault injection, throttling |
 | `tests/test_auth_state.py` | Saved login and isolation check |
@@ -328,9 +324,8 @@ pytest -m "critical and not negative"
 
 | Check | Result |
 | --- | --- |
-| `pytest` | 58 passed (22 browser + 36 framework), 6 deselected (`auth` ×2, `manual` ×3, `data_creating` ×1) |
-| `pytest -n auto` | 58 passed; same `reports/traceability.csv` as the serial run |
-| `reports/traceability.md` | every requirement PASS, except REQ-07 NOT RUN (both registration tests excluded) |
+| `pytest` | 54 passed (22 browser + 32 framework), 6 deselected (`auth` ×2, `manual` ×3, `data_creating` ×1) |
+| `pytest -n auto` | 54 passed |
 | `pytest -m auth` (with an account) | 2 passed |
 | Failed test | `test-results/<test>/trace.zip`, screenshot, video |
 
@@ -340,7 +335,7 @@ Verified on the live store (2026-11-25). Two things the live store taught the su
 
 1. Add a fault-injection test: the cart page answers 503. What should the customer see? Write the assertion.
 2. Make `test_catalog_loads_on_a_slow_network` fail by lowering the timeout to 1 s, then open its trace and find the slow request.
-3. Add a search test for "sandals" with the right requirement and risk markers. Run `pytest` and check that `reports/traceability.md` lists it under REQ-08.
+3. Add a search test for "sandals" with the right requirement and risk markers. Run `pytest -m search_products` and check that it runs with the other REQ-08 tests.
 4. Run `pytest -n auto` three times and compare durations with the serial run.
 
 ---
@@ -442,11 +437,11 @@ Select-String -Path tests\*.py -Pattern ':nth-child|nth=|\.nth\('               
 | No `force=True` | Hides elements that a user could not click |
 | No positional selectors in tests | Breaks when the layout changes |
 | No raw CSS/XPath in tests | Locators belong in `pages/` |
-| Every test has a risk-level marker (`critical`, `high`, `medium`) and exactly one requirement marker | Keeps `pytest -m critical` and the traceability matrix complete (`tests/unit/test_traceability.py`) |
+| Every test has a risk-level marker (`critical`, `high`, `medium`) and exactly one requirement marker | Keeps `pytest -m critical` and `pytest -m <requirement>` complete (`tests/unit/test_markers.py`) |
 
 #### B4. Maintainability criteria (checklist)
 
-- [ ] Every requirement has a test: `reports/traceability.md` shows no NO TEST row (`tests/unit/test_traceability.py` enforces it)
+- [ ] Every requirement has a test (`tests/unit/test_markers.py` enforces it)
 - [ ] Tests read like the requirement: actions and checks through page objects, no URL or CSS in tests
 - [ ] No locator outside `pages/`
 - [ ] No fixed waits, no `force=True` (B3 searches return nothing)
@@ -460,5 +455,5 @@ Select-String -Path tests\*.py -Pattern ':nth-child|nth=|\.nth\('               
 | Check | Result on the mock store |
 | --- | --- |
 | B3 searches | no matches |
-| 3 runs of `pytest` | 58 passed each time, 0 flaky |
+| 3 runs of `pytest` | 54 passed each time, 0 flaky |
 | Forced failure | `trace.zip`, `test-failed-1.png`, `video.webm` in `test-results/` |
