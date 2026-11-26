@@ -78,7 +78,7 @@ Tạo context chỉ mất vài mili giây, nên mỗi test có giỏ hàng sạc
 
 #### Locator dạng chuỗi và các method tự viết của BasePage
 
-Locator là chuỗi có tiền tố chiến lược, viết giống repo Unit 1 (Selenium). `parse_locator()` trong `pages/base_page.py` đổi chúng thành selector của Playwright:
+Locator là chuỗi có tiền tố chiến lược, viết giống repo Unit 1 (Selenium). `BasePage.parse_locator()` đổi chúng thành selector của Playwright:
 
 | Chuỗi locator | Selector Playwright |
 | --- | --- |
@@ -99,7 +99,7 @@ Page không gọi `self.page`: page truyền chuỗi locator cho các method c�
 | Đọc và trạng thái | `get_text`, `get_input_value`, `is_element_visible(..., timeout=0)`, `is_element_enabled(..., timeout=0)` — chờ trạng thái tối đa `timeout` giây, không ngủ cố định |
 | Kiểm tra (`expect()`, raise `AssertionError`) | `element_should_be_visible`, `element_should_be_disabled`, `element_should_contain_text`, `element_should_have_count` — đều nhận `error_msg` tùy chọn |
 
-`tests/unit/test_page_objects_layout.py` làm lần chạy fail nếu có locator mà `parse_locator()` không nhận hoặc có `self.page` ngoài `BasePage`; `tests/unit/test_locators.py` kiểm tra từng tiền tố, `tests/unit/test_base_page_methods.py` chạy các method trong Chromium với HTML cục bộ (không cần mạng).
+`tests/unit/test_page_objects_layout.py` làm lần chạy fail nếu có locator mà `BasePage.parse_locator()` không nhận, có `self.page` ngoài `BasePage`, hoặc có code nằm ngoài class page (hàm phụ như `money_to_float` là method của `BasePage`); `tests/unit/test_locators.py` kiểm tra từng tiền tố, `tests/unit/test_base_page_methods.py` chạy các method trong Chromium với HTML cục bộ (không cần mạng).
 
 ### 4. Fixture (`tests/conftest.py`)
 
@@ -118,7 +118,7 @@ Page không gọi `self.page`: page truyền chuỗi locator cho các method c�
 def cart_with(shop, products):
     """Factory fixture: cart_with("Noir jacket", 2) puts 2 Noir jackets in this test's cart."""
     def _add(name: str, quantity: int = 1):
-        shop.product.open_product(products[name]["handle"])
+        shop.product.open_product(products[name]["url"])
         shop.product.add_to_cart(quantity)
         return shop.cart.open()
     return _add
@@ -139,7 +139,7 @@ def test_add_an_in_stock_product_to_the_cart(shop, products, step):
 
     # Execution steps
     with step("Open the product page of Grey jacket"):
-        shop.product.open_product(grey_jacket["handle"])
+        shop.product.open_product(grey_jacket["url"])
     with step("Add 1 item to the cart"):
         shop.product.add_to_cart(1)           # chờ response AJAX của /cart/add
     with step("Verify the cart has 1 item, total £55.00"):
@@ -271,7 +271,7 @@ Test network cũng mang marker rủi ro và marker yêu cầu như mọi test kh
 
 ```python
 page.route("**/cart/add*", lambda route: route.fulfill(status=500, body="Internal Server Error"))
-shop.product.open_product(products["Noir jacket"]["handle"])
+shop.product.open_product(products["Noir jacket"]["url"])
 shop.product.add_button.click()
 page.unroute("**/cart/add*")
 expect(shop.cart.open().quantity_inputs).to_have_count(0)

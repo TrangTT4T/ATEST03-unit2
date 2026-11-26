@@ -3,9 +3,7 @@ import re
 
 from playwright.sync_api import Locator
 
-from .base_page import BasePage, money_to_float
-
-TOTAL = re.compile(r"(sub)?total[^£]{0,40}£\s?([\d,]+\.\d{2})", re.IGNORECASE)  # a text pattern, not a locator
+from .base_page import BasePage
 
 
 class CartPage(BasePage):
@@ -13,6 +11,7 @@ class CartPage(BasePage):
     same rows and quantity boxes, which would otherwise be counted twice."""
 
     path = "/cart"
+    TOTAL_PATTERN = re.compile(r"(sub)?total[^£]{0,40}£\s?([\d,]+\.\d{2})", re.IGNORECASE)  # text, not a locator
 
     ############################################################################
     # Cart line methods
@@ -58,10 +57,10 @@ class CartPage(BasePage):
     def total(self) -> float:
         """The cart total in pounds, e.g. 55.0."""
         text = self.get_text(self._root)
-        match = TOTAL.search(text)
+        match = self.TOTAL_PATTERN.search(text)
         if match:
             return float(match.group(2).replace(",", ""))
-        return money_to_float(re.findall(r"£\s?[\d,]+\.\d{2}", text)[-1])
+        return self.money_to_float(re.findall(r"£\s?[\d,]+\.\d{2}", text)[-1])
 
     def checkout(self):
         """Click Check Out and wait for the checkout page."""

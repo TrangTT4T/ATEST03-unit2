@@ -4,7 +4,7 @@ Locators are STRINGS with a strategy prefix, the same syntax as the Unit 1 (Sele
 
     _search_box = "name=q"
     _mini_cart  = r"role=link[name=/My Cart \\(\\d+\\)/]"
-    _tile       = "css=a[href*='/products/{handle}']"      # a template, filled with locator()
+    _tile       = "css=a[href*='{url}']"                  # a template, filled with locator()
 
 ``parse_locator()`` below turns the string into a Playwright selector. Prefixes:
 
@@ -31,57 +31,64 @@ from collections.abc import Callable
 from playwright.sync_api import Locator, Page, Response, expect
 from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 
-MONEY = re.compile(r"£\s?([\d,]+\.\d{2})")
-
-
-def parse_locator(locator: str) -> str:
-    """'name=q' -> "css=[name='q']";  '//h1' -> 'xpath=//h1';  'css=#cart' -> 'css=#cart'
-
-    :param locator: a locator string, with or without a strategy prefix
-    :return: a Playwright selector
-    """
-
-    def quoted(text: str) -> str:
-        return "'" + text.replace("\\", "\\\\").replace("'", "\\'") + "'"
-
-    def regex(text: str) -> str:
-        return re.escape(text).replace("/", "\\/")
-
-    playwright_engines = ("css", "xpath", "text", "role", "id", "data-testid")  # passed through
-    unit1_strategies: dict[str, Callable[[str], str]] = {  # translated to a Playwright selector
-        "name": lambda v: f"css=[name={quoted(v)}]",
-        "tag": lambda v: f"css={v}",
-        "class": lambda v: f"css=.{v}",
-        "link": lambda v: f"role=link[name={quoted(v)} s]",  # exact
-        "partial_link": lambda v: f"role=link[name=/{regex(v)}/]",  # contains, case-sensitive
-    }
-    if not isinstance(locator, str) or not locator.strip():
-        raise ValueError(f"A locator is a non-empty string such as 'css=#cart', got {locator!r}")
-    prefix, separator, value = locator.partition("=")
-    prefix = prefix.strip()
-    if separator and (prefix in playwright_engines or prefix in unit1_strategies):
-        if not value.strip():
-            raise ValueError(f"Locator {locator!r} has a strategy but no value")
-        return f"{prefix}={value.strip()}" if prefix in playwright_engines else unit1_strategies[prefix](value.strip())
-    if locator.startswith(("//", "(/", "./")):
-        return f"xpath={locator}"
-    return f"css={locator}"
-
-
-def money_to_float(text: str) -> float:
-    """'£1,120.00' -> 1120.0"""
-    match = MONEY.search(text)
-    if not match:
-        raise ValueError(f"No £ amount found in: {text!r}")
-    return float(match.group(1).replace(",", ""))
-
 
 class BasePage:
     path = "/"
+    MONEY_PATTERN = re.compile(r"£\s?([\d,]+\.\d{2})")  # a text pattern, not a locator
 
     def __init__(self, page: Page):
         self.page = page
         self.logger = logging.getLogger(type(self).__name__)  # in the report of a failed test
+
+    ############################################################################
+    # Locator and data helpers (no browser needed)
+    # Scope: Every page > locator strings, prices
+    ############################################################################
+    @staticmethod
+    def parse_locator(locator: str) -> str:
+        """'name=q' -> "css=[name='q']";  '//h1' -> 'xpath=//h1';  'css=#cart' -> 'css=#cart'
+
+        :param locator: a locator string, with or without a strategy prefix
+        :return: a Playwright selector
+        """
+
+        def quoted(text: str) -> str:
+            return "'" + text.replace("\\", "\\\\").replace("'", "\\'") + "'"
+
+        def regex(text: str) -> str:
+            return re.escape(text).replace("/", "\\/")
+
+        playwright_engines = ("css", "xpath", "text", "role", "id", "data-testid")  # passed through
+        unit1_strategies: dict[str, Callable[[str], str]] = {  # translated to a Playwright selector
+            "name": lambda v: f"css=[name={quoted(v)}]",
+            "tag": lambda v: f"css={v}",
+            "class": lambda v: f"css=.{v}",
+            "link": lambda v: f"role=link[name={quoted(v)} s]",  # exact
+            "partial_link": lambda v: f"role=link[name=/{regex(v)}/]",  # contains, case-sensitive
+        }
+        if not isinstance(locator, str) or not locator.strip():
+            raise ValueError(f"A locator is a non-empty string such as 'css=#cart', got {locator!r}")
+        prefix, separator, value = locator.partition("=")
+        prefix = prefix.strip()
+        if separator and (prefix in playwright_engines or prefix in unit1_strategies):
+            if not value.strip():
+                raise ValueError(f"Locator {locator!r} has a strategy but no value")
+            return f"{prefix}={value.strip()}" if prefix in playwright_engines else unit1_strategies[prefix](value.strip())
+        if locator.startswith(("//", "(/", "./")):
+            return f"xpath={locator}"
+        return f"css={locator}"
+
+    @staticmethod
+    def money_to_float(text: str) -> float:
+        """'£1,120.00' -> 1120.0
+
+        :param text: any text with one £ amount in it
+        :return: the amount as a float
+        """
+        match = BasePage.MONEY_PATTERN.search(text)
+        if not match:
+            raise ValueError(f"No £ amount found in: {text!r}")
+        return float(match.group(1).replace(",", ""))
 
     ############################################################################
     # Navigation methods
@@ -109,7 +116,7 @@ class BasePage:
         :param timeout: seconds; default is Playwright's (30 s for navigation)
         :return: this page
         """
-        self.page.wait_for_url(re.compile(re.escape(fragment)), timeout=_ms(timeout))
+        self.page.wait_for_url(re.compile(re.escape(fragment)), timeout=self._ms(timeout))
         return self
 
     ############################################################################
@@ -118,7 +125,7 @@ class BasePage:
     ############################################################################
     @staticmethod
     def locator(template: str, **values) -> str:
-        """Fill a locator template: ``locator(self._tile, handle="grey-jacket")``.
+        """Fill a locator template: ``locator(self._tile, url="/products/grey-jacket")``.
 
         :param template: locator string with ``{name}`` fields
         :return: the locator string with the fields filled in
@@ -140,9 +147,9 @@ class BasePage:
         if not locators:
             raise ValueError("find_element needs at least one locator")
         head, *inner = locators
-        element = head if isinstance(head, Locator) else self.page.locator(parse_locator(head))
+        element = head if isinstance(head, Locator) else self.page.locator(self.parse_locator(head))
         for selector in inner:
-            element = element.locator(parse_locator(selector))
+            element = element.locator(self.parse_locator(selector))
         return element.first if first else element
 
     def count_elements(self, *locators: "str | Locator") -> int:
@@ -163,7 +170,7 @@ class BasePage:
         :param locators: locator string(s), chained as in find_element
         :return: this page
         """
-        self.logger.info("Click %s", _describe(locators))
+        self.logger.info("Click %s", self._describe(locators))
         self.find_element(*locators, first=True).click()
         return self
 
@@ -201,7 +208,7 @@ class BasePage:
         :param secret: a password: the log shows *** instead of the text
         :return: this page
         """
-        self.logger.info("Type %r into %s", "***" if secret else text, _describe(locators))
+        self.logger.info("Type %r into %s", "***" if secret else text, self._describe(locators))
         self.find_element(*locators, first=True).fill(text)
         return self
 
@@ -233,9 +240,9 @@ class BasePage:
         if not timeout:
             return element.is_visible()
         try:
-            element.wait_for(state="visible", timeout=_ms(timeout))
+            element.wait_for(state="visible", timeout=self._ms(timeout))
         except PlaywrightTimeoutError:
-            self.logger.info("Element %s is not visible", _describe(locators))
+            self.logger.info("Element %s is not visible", self._describe(locators))
             return False
         return True
 
@@ -247,9 +254,9 @@ class BasePage:
         :return: True or False, never an exception
         """
         try:
-            expect(self.find_element(*locators, first=True)).to_be_enabled(timeout=_ms(timeout) or 1)
+            expect(self.find_element(*locators, first=True)).to_be_enabled(timeout=self._ms(timeout) or 1)
         except AssertionError:
-            self.logger.info("Element %s is disabled or missing", _describe(locators))
+            self.logger.info("Element %s is disabled or missing", self._describe(locators))
             return False
         return True
 
@@ -264,25 +271,25 @@ class BasePage:
         :param error_msg: message to fail with; default names the locator
         :return: this page
         """
-        message = error_msg or f"Element {_describe(locators)!r} is not visible"
+        message = error_msg or f"Element {self._describe(locators)!r} is not visible"
         expect(self.find_element(*locators, first=True), message).to_be_visible()
         return self
 
     def element_should_be_disabled(self, *locators: "str | Locator", error_msg: str | None = None):
         """Fail unless the element is (or becomes) disabled."""
-        message = error_msg or f"Element {_describe(locators)!r} is not disabled"
+        message = error_msg or f"Element {self._describe(locators)!r} is not disabled"
         expect(self.find_element(*locators, first=True), message).to_be_disabled()
         return self
 
     def element_should_contain_text(self, *locators: "str | Locator", text: str, error_msg: str | None = None):
         """Fail unless the element's text contains ``text``."""
-        message = error_msg or f"Element {_describe(locators)!r} does not contain {text!r}"
+        message = error_msg or f"Element {self._describe(locators)!r} does not contain {text!r}"
         expect(self.find_element(*locators, first=True), message).to_contain_text(text)
         return self
 
     def element_should_have_count(self, *locators: "str | Locator", count: int, error_msg: str | None = None):
         """Fail unless exactly ``count`` elements match."""
-        message = error_msg or f"Expected {count} element(s) {_describe(locators)!r}"
+        message = error_msg or f"Expected {count} element(s) {self._describe(locators)!r}"
         expect(self.find_element(*locators), message).to_have_count(count)
         return self
 
@@ -311,17 +318,17 @@ class BasePage:
         self.wait_for_url_contains("/search")
         return self
 
+    @staticmethod
+    def _describe(locators) -> str:
+        """Locators as one readable string for logs and error messages."""
+        return " >> ".join(item if isinstance(item, str) else "<scope>" for item in locators)
+
+    @staticmethod
+    def _ms(seconds: float | None) -> float | None:
+        """Seconds (the unit of every timeout here, as in Unit 1) -> Playwright milliseconds."""
+        return None if seconds is None else seconds * 1000
+
     # --- Locators -------------------------------------------------------------
     # Header (on every page)
     _mini_cart = r"role=link[name=/My Cart \(\d+\)/]"
     _search_box = "name=q"
-
-
-def _describe(locators) -> str:
-    """Locators as one readable string for logs and error messages."""
-    return " >> ".join(item if isinstance(item, str) else "<scope>" for item in locators)
-
-
-def _ms(seconds: float | None) -> float | None:
-    """Seconds (the unit of every timeout here, as in Unit 1) -> Playwright milliseconds."""
-    return None if seconds is None else seconds * 1000

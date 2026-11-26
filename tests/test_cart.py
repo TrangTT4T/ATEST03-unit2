@@ -7,7 +7,7 @@ import re
 import pytest
 from playwright.sync_api import expect
 
-from pages import CartPage, money_to_float
+from pages import BasePage, CartPage
 
 pytestmark = pytest.mark.critical
 
@@ -16,7 +16,7 @@ def expect_cart(cart: CartPage, items: int, total: str) -> None:
     """The cart holds ``items`` items in all and its total is ``total`` (e.g. "£55.00")."""
     expect(cart.mini_cart).to_have_text(re.compile(rf"My Cart \({items}\)"))  # retries until updated
     assert cart.total_quantity() == items
-    assert cart.total() == money_to_float(total)
+    assert cart.total() == BasePage.money_to_float(total)
 
 
 @pytest.mark.smoke
@@ -28,7 +28,7 @@ def test_add_an_in_stock_product_to_the_cart(shop, products, step):
 
     # Execution steps
     with step("Open the product page of Grey jacket"):
-        shop.product.open_product(grey_jacket["handle"])
+        shop.product.open_product(grey_jacket["url"])
     with step("Add 1 item to the cart"):
         shop.product.add_to_cart(1)
     with step("Verify the cart has 1 item, total £55.00"):

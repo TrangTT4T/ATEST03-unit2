@@ -1,6 +1,7 @@
 """Layout rules for page objects, checked on every run.
 
-* one class per file in pages/;
+* one class per file in pages/, and NOTHING outside it: only the docstring, imports and that class
+  (a helper function or constant at module level belongs inside the class, e.g. BasePage.money_to_float);
 * its methods are grouped under ``####`` banners, each naming its area with ``# Scope: ...``;
 * every public method and property has a docstring;
 * its locators are declared at the BOTTOM of the class, after the last method, as locator STRINGS
@@ -15,7 +16,7 @@ from pathlib import Path
 
 import pytest
 
-from pages.base_page import parse_locator
+from pages import BasePage
 
 BANNER = re.compile(r"^\s*#{20,}\n\s*# .+\n\s*# Scope: .+\n\s*#{20,}$", re.MULTILINE)
 PAGES = sorted(p for p in (Path(__file__).resolve().parents[2] / "pages").glob("*.py") if p.name != "__init__.py")
@@ -25,6 +26,10 @@ def layout_problems(source: str, is_base_page: bool = False) -> list[str]:
     tree = ast.parse(source)
     classes = [n for n in tree.body if isinstance(n, ast.ClassDef)]
     problems = [] if len(classes) == 1 else [f"{len(classes)} classes; a page file holds exactly one"]
+    for node in tree.body:
+        is_docstring = isinstance(node, ast.Expr) and isinstance(node.value, ast.Constant) and isinstance(node.value.value, str)
+        if not (is_docstring or isinstance(node, (ast.Import, ast.ImportFrom, ast.ClassDef))):
+            problems.append(f"line {node.lineno}: code outside the class; put it inside the page class")
     lines = source.splitlines()
     for cls in classes:
         methods = [n for n in cls.body if isinstance(n, ast.FunctionDef)]
@@ -46,7 +51,7 @@ def layout_problems(source: str, is_base_page: bool = False) -> list[str]:
                 problems.append(f"line {node.lineno}: a locator is a string such as 'css=...'")
             else:
                 try:
-                    parse_locator(node.value.value)
+                    BasePage.parse_locator(node.value.value)
                 except ValueError as error:
                     problems.append(f"line {node.lineno}: {error}")
         for method in methods:
@@ -77,9 +82,14 @@ def test_the_rule_catches_violations() -> None:
         "        return self.page.locator('#x')\n"  # 4: inline selector, self.page
         "class B:\n"  # second class
         "    pass\n"
+        "def money_to_float(text):\n"  # 7: a helper outside the class
+        "    return 1.0\n"
+        "TOTAL = 1\n"  # 9: a constant outside the class
     )
     assert layout_problems(sample) == [
         "2 classes; a page file holds exactly one",
+        "line 7: code outside the class; put it inside the page class",
+        "line 9: code outside the class; put it inside the page class",
         "A: no '####' banner with '# Scope: ...' above its methods",
         "line 3: A.read has no docstring",
         "line 2: selector above a method; move it to the bottom",

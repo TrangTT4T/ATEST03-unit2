@@ -1,11 +1,11 @@
 {
   "products": {
-    "Black heels":    {"handle": "flower-print-jeans", "price": "£45.00", "status": "available"},
-    "Bronze sandals": {"handle": "bronze-sandals",     "price": "£39.99", "status": "available"},
-    "Brown Shades":   {"handle": "brown-shades",       "price": "£20.00", "status": "sold out"},
-    "Grey jacket":    {"handle": "grey-jacket",        "price": "£55.00", "status": "available"},
-    "Noir jacket":    {"handle": "noir-jacket",        "price": "£60.00", "status": "available"},
-    "Striped top":    {"handle": "striped-top",        "price": "£50.00", "status": "available"},
-    "White sandals":  {"handle": "white-sandals",      "price": "£25.00", "status": "sold out"}
+    "Black heels":     {"url": "/products/flower-print-jeans",  "price": "£45.00", "status": "available"},
+    "Bronze sandals":  {"url": "/products/bronze-sandals",      "price": "£39.99", "status": "available"},
+    "Brown Shades":    {"url": "/products/brown-shades",        "price": "£20.00", "status": "sold out"},
+    "Grey jacket":     {"url": "/products/grey-jacket",         "price": "£55.00", "status": "available"},
+    "Noir jacket":     {"url": "/products/noir-jacket",         "price": "£60.00", "status": "available"},
+    "Striped top":     {"url": "/products/striped-top",         "price": "£50.00", "status": "available"},
+    "White sandals":   {"url": "/products/white-sandals",       "price": "£25.00", "status": "sold out"}
   }
 }

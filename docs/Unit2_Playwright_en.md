@@ -78,7 +78,7 @@ A context costs milliseconds, so every test gets a clean cart without restarting
 
 #### Locator strings and the custom BasePage methods
 
-Locators are strings with a strategy prefix, written the same way as in the Unit 1 (Selenium) repository. `parse_locator()` in `pages/base_page.py` turns them into Playwright selectors:
+Locators are strings with a strategy prefix, written the same way as in the Unit 1 (Selenium) repository. `BasePage.parse_locator()` turns them into Playwright selectors:
 
 | Locator string | Playwright selector |
 | --- | --- |
@@ -99,7 +99,7 @@ Pages never call `self.page`: they pass locator strings to the `BasePage` method
 | Read and state | `get_text`, `get_input_value`, `is_element_visible(..., timeout=0)`, `is_element_enabled(..., timeout=0)` — wait for the state up to `timeout` seconds, never a fixed sleep |
 | Checks (`expect()`, raise `AssertionError`) | `element_should_be_visible`, `element_should_be_disabled`, `element_should_contain_text`, `element_should_have_count` — each takes an optional `error_msg` |
 
-`tests/unit/test_page_objects_layout.py` fails the run on a locator that `parse_locator()` rejects or on `self.page` outside `BasePage`; `tests/unit/test_locators.py` checks every prefix, and `tests/unit/test_base_page_methods.py` runs the methods in Chromium against local HTML (no network).
+`tests/unit/test_page_objects_layout.py` fails the run on a locator that `BasePage.parse_locator()` rejects, on `self.page` outside `BasePage`, or on any code outside the page class (a helper such as `money_to_float` is a `BasePage` method); `tests/unit/test_locators.py` checks every prefix, and `tests/unit/test_base_page_methods.py` runs the methods in Chromium against local HTML (no network).
 
 ### 4. Fixtures (`tests/conftest.py`)
 
@@ -118,7 +118,7 @@ Pages never call `self.page`: they pass locator strings to the `BasePage` method
 def cart_with(shop, products):
     """Factory fixture: cart_with("Noir jacket", 2) puts 2 Noir jackets in this test's cart."""
     def _add(name: str, quantity: int = 1):
-        shop.product.open_product(products[name]["handle"])
+        shop.product.open_product(products[name]["url"])
         shop.product.add_to_cart(quantity)
         return shop.cart.open()
     return _add
@@ -139,7 +139,7 @@ def test_add_an_in_stock_product_to_the_cart(shop, products, step):
 
     # Execution steps
     with step("Open the product page of Grey jacket"):
-        shop.product.open_product(grey_jacket["handle"])
+        shop.product.open_product(grey_jacket["url"])
     with step("Add 1 item to the cart"):
         shop.product.add_to_cart(1)           # waits for the AJAX /cart/add answer
     with step("Verify the cart has 1 item, total £55.00"):
@@ -271,7 +271,7 @@ Network tests carry a risk marker and a requirement marker like every other test
 
 ```python
 page.route("**/cart/add*", lambda route: route.fulfill(status=500, body="Internal Server Error"))
-shop.product.open_product(products["Noir jacket"]["handle"])
+shop.product.open_product(products["Noir jacket"]["url"])
 shop.product.add_button.click()
 page.unroute("**/cart/add*")
 expect(shop.cart.open().quantity_inputs).to_have_count(0)

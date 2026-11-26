@@ -1,7 +1,7 @@
-"""Locator strings -> Playwright selectors: parse_locator() in pages/base_page.py (no browser)."""
+"""Locator strings -> Playwright selectors: BasePage.parse_locator() (no browser)."""
 import pytest
 
-from pages.base_page import parse_locator
+from pages import BasePage
 
 
 @pytest.mark.parametrize("locator, selector", [
@@ -28,10 +28,10 @@ from pages.base_page import parse_locator
     ("input[name='q']", "css=input[name='q']"),
 ])
 def test_parse_locator(locator: str, selector: str) -> None:
-    assert parse_locator(locator) == selector
+    assert BasePage.parse_locator(locator) == selector
 
 
 @pytest.mark.parametrize("bad", ["", "   ", "css=", "name=", ("css", "#cart")])
 def test_bad_locators_fail_loudly(bad) -> None:
     with pytest.raises(ValueError):
-        parse_locator(bad)
+        BasePage.parse_locator(bad)

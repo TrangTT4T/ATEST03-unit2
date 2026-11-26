@@ -1,4 +1,4 @@
-"""Product detail page: /products/<handle>"""
+"""Product detail page: /products/<name in the URL>"""
 from playwright.sync_api import Locator
 
 from .base_page import BasePage
@@ -9,9 +9,9 @@ class ProductPage(BasePage):
     # Product detail methods
     # Scope: Product page > Name, price, stock
     ############################################################################
-    def open_product(self, handle: str):
-        """Open /products/<handle> (the handle comes from dataset/products.json)."""
-        return self.open(f"/products/{handle}")
+    def open_product(self, url: str):
+        """Open a product page by its ``url`` from dataset/products.json, e.g. "/products/grey-jacket"."""
+        return self.open(url)
 
     @property
     def title(self) -> Locator:
