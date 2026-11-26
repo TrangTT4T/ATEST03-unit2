@@ -8,7 +8,7 @@ Unit 2 is **plain Playwright**: tests are pytest functions that drive page objec
 
 | From Unit 1 | In Unit 2 |
 | --- | --- |
-| Requirements REQ-01 … REQ-08 and their risks | `dataset/requirements.json` (same file); every test carries one requirement marker, e.g. `@pytest.mark.add_to_cart` |
+| Requirements REQ-01 … REQ-08 and their risks | Every test carries one requirement marker, e.g. `@pytest.mark.add_to_cart` (declared in `pytest.ini`) |
 | Gherkin tags `@critical` `@smoke` `@negative` | pytest markers with the same names, declared in `pytest.ini` (`--strict-markers`) |
 | `dataset/products.json` | Same file |
 | Page Object pattern, one class per file, locators at the bottom | `pages/` with Playwright locators and auto-waiting |
@@ -28,8 +28,7 @@ ATEST03-unit2/
 ├── pytest.ini                   # base_url, tracing, reports, markers (--strict-markers)
 ├── requirements.txt
 ├── dataset/
-│   ├── products.json            # Unit 1 test data
-│   └── requirements.json        # Unit 1 requirements: marker -> REQ id, title, risk
+│   └── products.json            # Unit 1 test data
 ├── pages/                       # Playwright Page Objects: one class per file
 ├── tests/
 │   ├── conftest.py              # fixtures, network control, auth state
@@ -41,7 +40,7 @@ ATEST03-unit2/
 │   ├── test_search.py           # @search_products                  (Medium)
 │   ├── test_network.py          # interception, fault injection, throttling
 │   ├── test_auth_state.py       # saved login (needs a real account)
-│   └── unit/                    # framework rules: page-object layout, markers (no browser)
+│   └── unit/                    # framework rules: page-object layout (no browser)
 └── docs/Unit2_Playwright_vi.md, Unit2_Playwright_en.md
 ```
 
@@ -50,7 +49,7 @@ ATEST03-unit2/
 ```bash
 pip install -r requirements.txt
 playwright install chromium
-pytest                               # 22 browser tests + 32 framework tests; manual/data_creating/auth excluded
+pytest                               # 22 browser tests + 9 framework tests; manual/data_creating/auth excluded
 pytest -m smoke
 pytest -m critical                   # every Critical-risk test
 pytest -m add_to_cart                # every test of one requirement
@@ -70,7 +69,7 @@ Every run writes:
 | JUnit XML | `reports/junit.xml` | CI test tab |
 | Trace, screenshot, video of failed tests | `test-results/` | debugging |
 
-Every test carries one requirement marker (`@pytest.mark.add_to_cart` …, registry `dataset/requirements.json`): `pytest -m add_to_cart` runs one requirement, and the markers appear in the HTML report. The framework tests in `tests/unit/` fail when a test has no or two requirement markers, a requirement has no test, or a requirement marker is missing from `pytest.ini`; `--strict-markers` rejects a marker typo such as `add_to_card`.
+Every test carries one requirement marker (`@pytest.mark.add_to_cart` …, declared in `pytest.ini`): `pytest -m add_to_cart` runs one requirement, and the markers appear in the HTML report. `--strict-markers` rejects a marker typo such as `add_to_card`.
 
 ## Known limits of the public demo store
 

@@ -19,7 +19,6 @@ ATEST03-unit2/
 ├── pytest.ini                   # base_url, tracing, reports, markers (--strict-markers)
 ├── requirements.txt
 ├── dataset/products.json        # same test data as Unit 1
-├── dataset/requirements.json    # the Unit 1 requirements: marker -> REQ id, title, risk
 ├── pages/                       # Playwright Page Objects (ported from Unit 1): one class per file
 └── tests/
     ├── conftest.py              # fixtures: data, isolation, network control, auth state
@@ -27,7 +26,7 @@ ATEST03-unit2/
     ├── test_login.py test_register.py  test_search.py   # one file per area, one marker per requirement
     ├── test_network.py          # interception, request assertion, fault injection, throttling
     ├── test_auth_state.py       # saved login + isolation check
-    └── unit/                    # framework rules (no browser): page-object layout, markers
+    └── unit/                    # framework rules (no browser): page-object layout
 ```
 
 ---
@@ -43,7 +42,7 @@ Unit 2 keeps WHAT Unit 1 tests (requirements, risks, data) and changes HOW: plai
 | Unit 1 (behave + Selenium) | Unit 2 (pytest + Playwright) | Status |
 | --- | --- | --- |
 | `tests/features/*.feature` (14 scenarios) | One pytest test per scenario in `tests/test_<area>.py`; Examples tables become `@pytest.mark.parametrize` | Rewritten as plain tests |
-| Requirement tags `@add_to_cart` … | Markers `@pytest.mark.add_to_cart` …; registry `dataset/requirements.json` (same file) | Inherited |
+| Requirement tags `@add_to_cart` … | Markers `@pytest.mark.add_to_cart` …, declared in `pytest.ini` | Inherited |
 | `dataset/products.json` | Same file | Inherited |
 | Tags `@critical`, `@smoke`, `@negative` | Same names as pytest markers: `pytest -m smoke`; the area is the file: `pytest tests/test_cart.py` | Inherited |
 | Page Objects (`pages/`) | Same class names, Playwright `Locator` instead of `WebElement` | Ported |
@@ -131,7 +130,7 @@ def test_add_an_in_stock_product_to_the_cart(shop, products):
 cd ATEST03-unit2
 pip install -r requirements.txt
 playwright install chromium
-pytest --collect-only -q          # 28 browser tests (22 in the default run) + 32 framework tests
+pytest --collect-only -q          # 28 browser tests (22 in the default run) + 9 framework tests
 pytest -m smoke                   # same smoke markers as Unit 1's tags
 pytest --headed --slowmo 300      # watch it run
 ```
@@ -324,8 +323,8 @@ pytest -m "critical and not negative"
 
 | Check | Result |
 | --- | --- |
-| `pytest` | 54 passed (22 browser + 32 framework), 6 deselected (`auth` ×2, `manual` ×3, `data_creating` ×1) |
-| `pytest -n auto` | 54 passed |
+| `pytest` | 31 passed (22 browser + 9 framework), 6 deselected (`auth` ×2, `manual` ×3, `data_creating` ×1) |
+| `pytest -n auto` | 31 passed |
 | `pytest -m auth` (with an account) | 2 passed |
 | Failed test | `test-results/<test>/trace.zip`, screenshot, video |
 
@@ -437,11 +436,11 @@ Select-String -Path tests\*.py -Pattern ':nth-child|nth=|\.nth\('               
 | No `force=True` | Hides elements that a user could not click |
 | No positional selectors in tests | Breaks when the layout changes |
 | No raw CSS/XPath in tests | Locators belong in `pages/` |
-| Every test has a risk-level marker (`critical`, `high`, `medium`) and exactly one requirement marker | Keeps `pytest -m critical` and `pytest -m <requirement>` complete (`tests/unit/test_markers.py`) |
+| Every test has a risk-level marker (`critical`, `high`, `medium`) and exactly one requirement marker | Keeps `pytest -m critical` and `pytest -m <requirement>` complete |
 
 #### B4. Maintainability criteria (checklist)
 
-- [ ] Every requirement has a test (`tests/unit/test_markers.py` enforces it)
+- [ ] Every requirement REQ-01 … REQ-08 has a test: `pytest -m <requirement> --collect-only -q`
 - [ ] Tests read like the requirement: actions and checks through page objects, no URL or CSS in tests
 - [ ] No locator outside `pages/`
 - [ ] No fixed waits, no `force=True` (B3 searches return nothing)
@@ -455,5 +454,5 @@ Select-String -Path tests\*.py -Pattern ':nth-child|nth=|\.nth\('               
 | Check | Result on the mock store |
 | --- | --- |
 | B3 searches | no matches |
-| 3 runs of `pytest` | 54 passed each time, 0 flaky |
+| 3 runs of `pytest` | 31 passed each time, 0 flaky |
 | Forced failure | `trace.zip`, `test-failed-1.png`, `video.webm` in `test-results/` |

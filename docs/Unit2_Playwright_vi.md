@@ -19,7 +19,6 @@ ATEST03-unit2/
 ├── pytest.ini                   # base_url, tracing, báo cáo, marker (--strict-markers)
 ├── requirements.txt
 ├── dataset/products.json        # cùng dữ liệu test với Unit 1
-├── dataset/requirements.json    # yêu cầu của Unit 1: marker -> mã REQ, tiêu đề, rủi ro
 ├── pages/                       # Page Object Playwright (chuyển từ Unit 1): mỗi file một class
 └── tests/
     ├── conftest.py              # fixture: dữ liệu, cô lập, kiểm soát network, đăng nhập
@@ -27,7 +26,7 @@ ATEST03-unit2/
     ├── test_login.py test_register.py  test_search.py   # mỗi khu vực một file, mỗi yêu cầu một marker
     ├── test_network.py          # chặn request, kiểm tra request, giả lập lỗi, mạng chậm
     ├── test_auth_state.py       # phiên đăng nhập đã lưu + kiểm tra cô lập
-    └── unit/                    # quy tắc của framework (không mở trình duyệt): cấu trúc page object, marker
+    └── unit/                    # quy tắc của framework (không mở trình duyệt): cấu trúc page object
 ```
 
 ---
@@ -43,7 +42,7 @@ Unit 2 giữ CÁI GÌ Unit 1 kiểm thử (yêu cầu, rủi ro, dữ liệu) v�
 | Unit 1 (behave + Selenium) | Unit 2 (pytest + Playwright) | Trạng thái |
 | --- | --- | --- |
 | `tests/features/*.feature` (14 scenario) | Mỗi scenario thành một test pytest trong `tests/test_<khu_vực>.py`; bảng Examples thành `@pytest.mark.parametrize` | Viết lại thành test thường |
-| Tag yêu cầu `@add_to_cart` … | Marker `@pytest.mark.add_to_cart` …; danh mục `dataset/requirements.json` (cùng file) | Kế thừa |
+| Tag yêu cầu `@add_to_cart` … | Marker `@pytest.mark.add_to_cart` …, khai báo trong `pytest.ini` | Kế thừa |
 | `dataset/products.json` | Cùng file | Kế thừa |
 | Tag `@critical`, `@smoke`, `@negative` | Cùng tên, thành marker pytest: `pytest -m smoke`; khu vực là file: `pytest tests/test_cart.py` | Kế thừa |
 | Page Object (`pages/`) | Cùng tên class, dùng `Locator` của Playwright thay `WebElement` | Chuyển đổi |
@@ -131,7 +130,7 @@ def test_add_an_in_stock_product_to_the_cart(shop, products):
 cd ATEST03-unit2
 pip install -r requirements.txt
 playwright install chromium
-pytest --collect-only -q          # 28 test trình duyệt (22 chạy mặc định) + 32 test framework
+pytest --collect-only -q          # 28 test trình duyệt (22 chạy mặc định) + 9 test framework
 pytest -m smoke                   # cùng tag smoke như Unit 1
 pytest --headed --slowmo 300      # xem trình duyệt chạy
 ```
@@ -324,8 +323,8 @@ pytest -m "critical and not negative"
 
 | Kiểm tra | Kết quả |
 | --- | --- |
-| `pytest` | 54 pass (22 trình duyệt + 32 framework), 6 bị lọc (`auth` ×2, `manual` ×3, `data_creating` ×1) |
-| `pytest -n auto` | 54 pass |
+| `pytest` | 31 pass (22 trình duyệt + 9 framework), 6 bị lọc (`auth` ×2, `manual` ×3, `data_creating` ×1) |
+| `pytest -n auto` | 31 pass |
 | `pytest -m auth` (có tài khoản) | 2 pass |
 | Test fail | `test-results/<test>/trace.zip`, ảnh, video |
 
@@ -437,11 +436,11 @@ Select-String -Path tests\*.py -Pattern ':nth-child|nth=|\.nth\('               
 | Không `force=True` | Che đi phần tử mà người dùng không bấm được |
 | Không selector theo vị trí trong test | Hỏng khi bố cục thay đổi |
 | Không CSS/XPath thô trong test | Locator phải nằm trong `pages/` |
-| Test nào cũng có marker mức rủi ro (`critical`, `high`, `medium`) và đúng một marker yêu cầu | Giữ `pytest -m critical` và `pytest -m <yêu_cầu>` đầy đủ (`tests/unit/test_markers.py`) |
+| Test nào cũng có marker mức rủi ro (`critical`, `high`, `medium`) và đúng một marker yêu cầu | Giữ `pytest -m critical` và `pytest -m <yêu_cầu>` đầy đủ |
 
 #### B4. Tiêu chí bảo trì (checklist)
 
-- [ ] Yêu cầu nào cũng có test (`tests/unit/test_markers.py` kiểm tra)
+- [ ] Yêu cầu REQ-01 … REQ-08 nào cũng có test: `pytest -m <yêu_cầu> --collect-only -q`
 - [ ] Test đọc giống yêu cầu: thao tác và kiểm tra qua page object, không URL hay CSS trong test
 - [ ] Không có locator ngoài `pages/`
 - [ ] Không chờ cố định, không `force=True` (lệnh tìm ở B3 không ra kết quả)
@@ -455,5 +454,5 @@ Select-String -Path tests\*.py -Pattern ':nth-child|nth=|\.nth\('               
 | Kiểm tra | Kết quả trên site giả lập |
 | --- | --- |
 | Lệnh tìm ở B3 | không có kết quả |
-| 3 lần chạy `pytest` | mỗi lần 54 pass, 0 flaky |
+| 3 lần chạy `pytest` | mỗi lần 31 pass, 0 flaky |
 | Cố ý làm fail | `trace.zip`, `test-failed-1.png`, `video.webm` trong `test-results/` |

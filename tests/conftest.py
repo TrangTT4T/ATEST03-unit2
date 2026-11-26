@@ -1,6 +1,6 @@
 """Shared fixtures and hooks for the Playwright suite (Unit 2).
 
-Inherited from Unit 1: the requirements and risks (dataset/requirements.json), the test data
+Inherited from Unit 1: the requirements and risks (as markers), the test data
 (dataset/products.json), the Page Object pattern, one fresh browser state per test.
 New in Unit 2: plain Playwright tests on pytest - fixtures instead of hooks, markers instead of
 Gherkin tags, network control, tracing, auth state, xdist.
