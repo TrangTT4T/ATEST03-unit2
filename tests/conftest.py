@@ -106,7 +106,7 @@ def shop(page: Page) -> SimpleNamespace:
 def cart_with(shop, products):
     """Factory fixture: cart_with("Noir jacket", 2) puts 2 Noir jackets in this test's cart."""
     def _add(name: str, quantity: int = 1):
-        shop.product.open_product(products[name]["url"])
+        shop.product.open_product(products[name]["path-name"])
         shop.product.add_to_cart(quantity)
         return shop.cart.open()
     return _add

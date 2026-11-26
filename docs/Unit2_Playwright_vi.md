@@ -118,7 +118,7 @@ Page không gọi `self.page`: page truyền chuỗi locator cho các method c�
 def cart_with(shop, products):
     """Factory fixture: cart_with("Noir jacket", 2) puts 2 Noir jackets in this test's cart."""
     def _add(name: str, quantity: int = 1):
-        shop.product.open_product(products[name]["url"])
+        shop.product.open_product(products[name]["path-name"])
         shop.product.add_to_cart(quantity)
         return shop.cart.open()
     return _add
@@ -139,7 +139,7 @@ def test_add_an_in_stock_product_to_the_cart(shop, products, step):
 
     # Execution steps
     with step("Open the product page of Grey jacket"):
-        shop.product.open_product(grey_jacket["url"])
+        shop.product.open_product(grey_jacket["path-name"])
     with step("Add 1 item to the cart"):
         shop.product.add_to_cart(1)           # chờ response AJAX của /cart/add
     with step("Verify the cart has 1 item, total £55.00"):
@@ -271,7 +271,7 @@ Test network cũng mang marker rủi ro và marker yêu cầu như mọi test kh
 
 ```python
 page.route("**/cart/add*", lambda route: route.fulfill(status=500, body="Internal Server Error"))
-shop.product.open_product(products["Noir jacket"]["url"])
+shop.product.open_product(products["Noir jacket"]["path-name"])
 shop.product.add_button.click()
 page.unroute("**/cart/add*")
 expect(shop.cart.open().quantity_inputs).to_have_count(0)

@@ -10,7 +10,7 @@ Unit 2 is **plain Playwright**: tests are pytest functions that drive page objec
 | --- | --- |
 | Requirements REQ-01 … REQ-08 and their risks | Every test carries one requirement marker, e.g. `@pytest.mark.add_to_cart` (declared in `pytest.ini`) |
 | Gherkin tags `@critical` `@smoke` `@negative` | pytest markers with the same names, declared in `pytest.ini` (`--strict-markers`) |
-| `dataset/products.json` | Same file: each product's `url` is its page address, never derived from the name (Black heels lives at `/products/flower-print-jeans`) |
+| `dataset/products.json` | Same file: each product's `path-name` is the last part of its page address (`/products/<path-name>`), never derived from the name (Black heels is `flower-print-jeans`) |
 | Page Object pattern, one class per file, locator strings (`css=`, `xpath=`, `name=` …) at the bottom, custom BasePage methods | Same layout and locator syntax; BasePage methods on Playwright's auto-waiting |
 | Hooks in `environment.py` | Fixtures in `tests/conftest.py` |
 | Screenshot on failure | Trace + screenshot + video on failure |
@@ -81,7 +81,7 @@ def test_add_an_in_stock_product_to_the_cart(shop, products, step):
 
     # Execution steps
     with step("Open the product page of Grey jacket"):
-        shop.product.open_product(grey_jacket["url"])
+        shop.product.open_product(grey_jacket["path-name"])
     with step("Add 1 item to the cart"):
         shop.product.add_to_cart(1)
     with step("Verify the cart has 1 item, total £55.00"):

@@ -4,7 +4,7 @@ Locators are STRINGS with a strategy prefix, the same syntax as the Unit 1 (Sele
 
     _search_box = "name=q"
     _mini_cart  = r"role=link[name=/My Cart \\(\\d+\\)/]"
-    _tile       = "css=a[href*='{url}']"                  # a template, filled with locator()
+    _tile       = "css=a[href*='/products/{path_name}']"  # a template, filled with locator()
 
 ``parse_locator()`` below turns the string into a Playwright selector. Prefixes:
 
@@ -125,7 +125,7 @@ class BasePage:
     ############################################################################
     @staticmethod
     def locator(template: str, **values) -> str:
-        """Fill a locator template: ``locator(self._tile, url="/products/grey-jacket")``.
+        """Fill a locator template: ``locator(self._tile, path_name="grey-jacket")``.
 
         :param template: locator string with ``{name}`` fields
         :return: the locator string with the fields filled in

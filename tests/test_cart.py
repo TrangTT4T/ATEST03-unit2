@@ -28,7 +28,7 @@ def test_add_an_in_stock_product_to_the_cart(shop, products, step):
 
     # Execution steps
     with step("Open the product page of Grey jacket"):
-        shop.product.open_product(grey_jacket["url"])
+        shop.product.open_product(grey_jacket["path-name"])
     with step("Add 1 item to the cart"):
         shop.product.add_to_cart(1)
     with step("Verify the cart has 1 item, total £55.00"):

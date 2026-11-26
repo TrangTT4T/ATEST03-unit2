@@ -26,7 +26,7 @@ def test_third_party_calls_are_blocked_and_shop_still_works(shop, page, block_th
         assert failed, "third-party request was not blocked"
         assert any("facebook.com" in url for url in block_third_party)
     with step("Add Grey jacket to the cart without the third-party services"):
-        shop.product.open_product(grey_jacket["url"])
+        shop.product.open_product(grey_jacket["path-name"])
         shop.product.add_to_cart()
     with step("Verify the cart has 1 item"):
         assert shop.cart.open().total_quantity() == 1
@@ -41,7 +41,7 @@ def test_add_to_cart_posts_the_product_form(shop, page, products, step):
 
     # Execution steps
     with step("Open the product page of Striped top"):
-        shop.product.open_product(striped_top["url"])
+        shop.product.open_product(striped_top["path-name"])
     with step("Add to cart and capture the /cart/add request"):
         with page.expect_request(lambda r: "/cart/add" in r.url and r.method == "POST") as request_info:
             shop.product.add_button.click()
@@ -62,7 +62,7 @@ def test_failed_add_to_cart_request_does_not_add_the_product(shop, page, product
     with step("Make the server answer 500 to every add-to-cart call (fault injection)"):
         page.route("**/cart/add*", lambda route: route.fulfill(status=500, body="Internal Server Error"))
     with step("Open the product page of Noir jacket and click Add to Cart"):
-        shop.product.open_product(noir_jacket["url"])
+        shop.product.open_product(noir_jacket["path-name"])
         shop.product.add_button.click()
     with step("Restore the network and verify the cart is empty"):
         page.unroute("**/cart/add*")
@@ -85,4 +85,4 @@ def test_catalog_loads_on_a_slow_network(shop, page, context, products, step):
     with step("Open the catalog"):
         shop.catalog.open()
     with step("Verify Bronze sandals shows £39.99 (allowing 15 s)"):
-        expect(shop.catalog.tile(bronze_sandals["url"])).to_contain_text("£39.99", timeout=15_000)
+        expect(shop.catalog.tile(bronze_sandals["path-name"])).to_contain_text("£39.99", timeout=15_000)
