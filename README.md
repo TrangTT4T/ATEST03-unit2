@@ -41,7 +41,7 @@ ATEST03-unit2/
 │   ├── test_search.py           # @search_products                  (Medium)
 │   ├── test_network.py          # interception, fault injection, throttling
 │   ├── test_auth_state.py       # saved login (needs a real account)
-│   └── unit/                    # framework rules (no browser): page-object and test layout, step helper
+│   └── unit/                    # framework rules: page-object and test layout, BasePage methods (local HTML)
 ├── helper_utility/steps.py      # the `step` fixture: numbered steps -> Allure step + trace group
 └── docs/Unit2_Playwright_vi.md, Unit2_Playwright_en.md
 ```
@@ -53,7 +53,7 @@ Requires **Python 3.12**: the version in `.python-version` (PyCharm, VS Code, py
 ```bash
 pip install -r requirements.txt
 playwright install chromium
-pytest                               # 22 browser tests + 38 framework tests; manual/data_creating/auth excluded
+pytest                               # 22 browser tests + 34 framework tests; manual/data_creating/auth excluded
 pytest -m smoke
 pytest -m critical                   # every Critical-risk test
 pytest -m add_to_cart                # every test of one requirement

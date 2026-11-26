@@ -26,7 +26,7 @@ ATEST03-unit2/
     ├── test_login.py test_register.py  test_search.py   # mỗi khu vực một file, mỗi yêu cầu một marker
     ├── test_network.py          # chặn request, kiểm tra request, giả lập lỗi, mạng chậm
     ├── test_auth_state.py       # phiên đăng nhập đã lưu + kiểm tra cô lập
-    └── unit/                    # quy tắc của framework (không mở trình duyệt): cấu trúc page object và test, helper step
+    └── unit/                    # quy tắc của framework: cấu trúc page object và test, method của BasePage (HTML cục bộ)
 helper_utility/steps.py          # fixture `step`: bước đánh số -> bước Allure + nhóm trong trace
 ```
 
@@ -190,7 +190,7 @@ Hai quy tắc này là test framework (`tests/unit/test_tests_read_as_steps.py`,
 cd ATEST03-unit2
 pip install -r requirements.txt
 playwright install chromium
-pytest --collect-only -q          # 28 test trình duyệt (22 chạy mặc định) + 38 test framework
+pytest --collect-only -q          # 28 test trình duyệt (22 chạy mặc định) + 34 test framework
 pytest -m smoke                   # cùng tag smoke như Unit 1
 pytest --headed --slowmo 300      # xem trình duyệt chạy
 ```
@@ -384,8 +384,8 @@ pytest -m "critical and not negative"
 
 | Kiểm tra | Kết quả |
 | --- | --- |
-| `pytest` | 60 pass (22 trình duyệt + 38 framework), 6 bị lọc (`auth` ×2, `manual` ×3, `data_creating` ×1) |
-| `pytest -n auto` | 60 pass |
+| `pytest` | 56 pass (22 trình duyệt + 34 framework), 6 bị lọc (`auth` ×2, `manual` ×3, `data_creating` ×1) |
+| `pytest -n auto` | 56 pass |
 | `pytest -m auth` (có tài khoản) | 2 pass |
 | Test fail | `test-results/<test>/trace.zip`, ảnh, video |
 
@@ -516,5 +516,5 @@ Select-String -Path tests\*.py -Pattern ':nth-child|nth=|\.nth\('               
 | Kiểm tra | Kết quả trên site giả lập |
 | --- | --- |
 | Lệnh tìm ở B3 | không có kết quả |
-| 3 lần chạy `pytest` | mỗi lần 60 pass, 0 flaky |
+| 3 lần chạy `pytest` | mỗi lần 56 pass, 0 flaky |
 | Cố ý làm fail | `trace.zip`, `test-failed-1.png`, `video.webm` trong `test-results/` |

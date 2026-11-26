@@ -26,7 +26,7 @@ ATEST03-unit2/
     ├── test_login.py test_register.py  test_search.py   # one file per area, one marker per requirement
     ├── test_network.py          # interception, request assertion, fault injection, throttling
     ├── test_auth_state.py       # saved login + isolation check
-    └── unit/                    # framework rules (no browser): page-object and test layout, step helper
+    └── unit/                    # framework rules: page-object and test layout, BasePage methods (local HTML)
 helper_utility/steps.py          # the `step` fixture: numbered steps -> Allure step + trace group
 ```
 
@@ -190,7 +190,7 @@ Both rules are framework tests (`tests/unit/test_tests_read_as_steps.py`, `tests
 cd ATEST03-unit2
 pip install -r requirements.txt
 playwright install chromium
-pytest --collect-only -q          # 28 browser tests (22 in the default run) + 38 framework tests
+pytest --collect-only -q          # 28 browser tests (22 in the default run) + 34 framework tests
 pytest -m smoke                   # same smoke markers as Unit 1's tags
 pytest --headed --slowmo 300      # watch it run
 ```
@@ -384,8 +384,8 @@ pytest -m "critical and not negative"
 
 | Check | Result |
 | --- | --- |
-| `pytest` | 60 passed (22 browser + 38 framework), 6 deselected (`auth` ×2, `manual` ×3, `data_creating` ×1) |
-| `pytest -n auto` | 60 passed |
+| `pytest` | 56 passed (22 browser + 34 framework), 6 deselected (`auth` ×2, `manual` ×3, `data_creating` ×1) |
+| `pytest -n auto` | 56 passed |
 | `pytest -m auth` (with an account) | 2 passed |
 | Failed test | `test-results/<test>/trace.zip`, screenshot, video |
 
@@ -516,5 +516,5 @@ Select-String -Path tests\*.py -Pattern ':nth-child|nth=|\.nth\('               
 | Check | Result on the mock store |
 | --- | --- |
 | B3 searches | no matches |
-| 3 runs of `pytest` | 60 passed each time, 0 flaky |
+| 3 runs of `pytest` | 56 passed each time, 0 flaky |
 | Forced failure | `trace.zip`, `test-failed-1.png`, `video.webm` in `test-results/` |
