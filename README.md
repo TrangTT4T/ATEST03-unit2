@@ -53,7 +53,7 @@ Requires **Python 3.12**: the version in `.python-version` (PyCharm, VS Code, py
 ```bash
 pip install -r requirements.txt
 playwright install chromium
-pytest                               # 22 browser tests + 61 framework tests; manual/data_creating/auth excluded
+pytest                               # 22 browser tests + 38 framework tests; manual/data_creating/auth excluded
 pytest -m smoke
 pytest -m critical                   # every Critical-risk test
 pytest -m add_to_cart                # every test of one requirement

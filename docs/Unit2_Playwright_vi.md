@@ -99,7 +99,7 @@ Page không gọi `self.page`: page truyền chuỗi locator cho các method c�
 | Đọc và trạng thái | `get_text`, `get_input_value`, `is_element_visible(..., timeout=0)`, `is_element_enabled(..., timeout=0)` — chờ trạng thái tối đa `timeout` giây, không ngủ cố định |
 | Kiểm tra (`expect()`, raise `AssertionError`) | `element_should_be_visible`, `element_should_be_disabled`, `element_should_contain_text`, `element_should_have_count` — đều nhận `error_msg` tùy chọn |
 
-`tests/unit/test_page_objects_layout.py` làm lần chạy fail nếu có locator mà `BasePage.parse_locator()` không nhận, có `self.page` ngoài `BasePage`, hoặc có code nằm ngoài class page (hàm phụ như `money_to_float` là method của `BasePage`); `tests/unit/test_locators.py` kiểm tra từng tiền tố, `tests/unit/test_base_page_methods.py` chạy các method trong Chromium với HTML cục bộ (không cần mạng).
+`tests/unit/test_page_objects_layout.py` làm lần chạy fail nếu có locator mà `BasePage.parse_locator()` không nhận, có `self.page` ngoài `BasePage`, hoặc có code nằm ngoài class page (hàm phụ như `money_to_float` là method của `BasePage`); `tests/unit/test_base_page_methods.py` chạy từng tiền tố locator và các method trong Chromium với HTML cục bộ (không cần mạng).
 
 ### 4. Fixture (`tests/conftest.py`)
 
@@ -190,7 +190,7 @@ Hai quy tắc này là test framework (`tests/unit/test_tests_read_as_steps.py`,
 cd ATEST03-unit2
 pip install -r requirements.txt
 playwright install chromium
-pytest --collect-only -q          # 28 test trình duyệt (22 chạy mặc định) + 61 test framework
+pytest --collect-only -q          # 28 test trình duyệt (22 chạy mặc định) + 38 test framework
 pytest -m smoke                   # cùng tag smoke như Unit 1
 pytest --headed --slowmo 300      # xem trình duyệt chạy
 ```
@@ -384,8 +384,8 @@ pytest -m "critical and not negative"
 
 | Kiểm tra | Kết quả |
 | --- | --- |
-| `pytest` | 83 pass (22 trình duyệt + 61 framework), 6 bị lọc (`auth` ×2, `manual` ×3, `data_creating` ×1) |
-| `pytest -n auto` | 83 pass |
+| `pytest` | 60 pass (22 trình duyệt + 38 framework), 6 bị lọc (`auth` ×2, `manual` ×3, `data_creating` ×1) |
+| `pytest -n auto` | 60 pass |
 | `pytest -m auth` (có tài khoản) | 2 pass |
 | Test fail | `test-results/<test>/trace.zip`, ảnh, video |
 
@@ -516,5 +516,5 @@ Select-String -Path tests\*.py -Pattern ':nth-child|nth=|\.nth\('               
 | Kiểm tra | Kết quả trên site giả lập |
 | --- | --- |
 | Lệnh tìm ở B3 | không có kết quả |
-| 3 lần chạy `pytest` | mỗi lần 83 pass, 0 flaky |
+| 3 lần chạy `pytest` | mỗi lần 60 pass, 0 flaky |
 | Cố ý làm fail | `trace.zip`, `test-failed-1.png`, `video.webm` trong `test-results/` |

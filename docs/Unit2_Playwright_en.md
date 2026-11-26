@@ -99,7 +99,7 @@ Pages never call `self.page`: they pass locator strings to the `BasePage` method
 | Read and state | `get_text`, `get_input_value`, `is_element_visible(..., timeout=0)`, `is_element_enabled(..., timeout=0)` — wait for the state up to `timeout` seconds, never a fixed sleep |
 | Checks (`expect()`, raise `AssertionError`) | `element_should_be_visible`, `element_should_be_disabled`, `element_should_contain_text`, `element_should_have_count` — each takes an optional `error_msg` |
 
-`tests/unit/test_page_objects_layout.py` fails the run on a locator that `BasePage.parse_locator()` rejects, on `self.page` outside `BasePage`, or on any code outside the page class (a helper such as `money_to_float` is a `BasePage` method); `tests/unit/test_locators.py` checks every prefix, and `tests/unit/test_base_page_methods.py` runs the methods in Chromium against local HTML (no network).
+`tests/unit/test_page_objects_layout.py` fails the run on a locator that `BasePage.parse_locator()` rejects, on `self.page` outside `BasePage`, or on any code outside the page class (a helper such as `money_to_float` is a `BasePage` method); `tests/unit/test_base_page_methods.py` runs every locator prefix and the methods in Chromium against local HTML (no network).
 
 ### 4. Fixtures (`tests/conftest.py`)
 
@@ -190,7 +190,7 @@ Both rules are framework tests (`tests/unit/test_tests_read_as_steps.py`, `tests
 cd ATEST03-unit2
 pip install -r requirements.txt
 playwright install chromium
-pytest --collect-only -q          # 28 browser tests (22 in the default run) + 61 framework tests
+pytest --collect-only -q          # 28 browser tests (22 in the default run) + 38 framework tests
 pytest -m smoke                   # same smoke markers as Unit 1's tags
 pytest --headed --slowmo 300      # watch it run
 ```
@@ -384,8 +384,8 @@ pytest -m "critical and not negative"
 
 | Check | Result |
 | --- | --- |
-| `pytest` | 83 passed (22 browser + 61 framework), 6 deselected (`auth` ×2, `manual` ×3, `data_creating` ×1) |
-| `pytest -n auto` | 83 passed |
+| `pytest` | 60 passed (22 browser + 38 framework), 6 deselected (`auth` ×2, `manual` ×3, `data_creating` ×1) |
+| `pytest -n auto` | 60 passed |
 | `pytest -m auth` (with an account) | 2 passed |
 | Failed test | `test-results/<test>/trace.zip`, screenshot, video |
 
@@ -516,5 +516,5 @@ Select-String -Path tests\*.py -Pattern ':nth-child|nth=|\.nth\('               
 | Check | Result on the mock store |
 | --- | --- |
 | B3 searches | no matches |
-| 3 runs of `pytest` | 83 passed each time, 0 flaky |
+| 3 runs of `pytest` | 60 passed each time, 0 flaky |
 | Forced failure | `trace.zip`, `test-failed-1.png`, `video.webm` in `test-results/` |
