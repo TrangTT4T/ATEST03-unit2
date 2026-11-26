@@ -3,9 +3,12 @@
 Locator strategy (Day 5): role/label/text first, then stable attributes (name, form action).
 No sleeps: Playwright auto-waits on actions and `expect()` retries assertions.
 
-Layout of every page object (one class per file): behaviour first, then a ``# --- Locators ---``
-section at the BOTTOM of the class. Methods use those names; a selector that depends on data is a
-template filled with ``.format(...)``. No selector is written inline in a method.
+Layout of every page object (one class per file), checked by tests/unit/test_page_objects_layout.py:
+
+* methods grouped under ``####`` banners that name the area of the page (``# Scope: ...``);
+* a docstring on every public method and property;
+* a ``# --- Locators ---`` section at the BOTTOM of the class. Methods use those names; a selector
+  that depends on data is a template filled with ``.format(...)``. No selector is written inline.
 """
 import re
 
@@ -28,7 +31,12 @@ class BasePage:
     def __init__(self, page: Page):
         self.page = page
 
+    ############################################################################
+    # Navigation methods
+    # Scope: Every page
+    ############################################################################
     def open(self, path: str | None = None):
+        """Go to ``path`` (default: this page's own path) on the store."""
         # Relative URL: pytest-playwright gives every context the --base-url.
         self.page.goto(path or self.path)
         return self
@@ -42,19 +50,26 @@ class BasePage:
         with self.page.expect_navigation(wait_until="domcontentloaded"):
             button.click()
 
-    # Header ----------------------------------------------------------------
+    ############################################################################
+    # Header methods
+    # Scope: Every page > Header (mini-cart, search box)
+    ############################################################################
     @property
     def mini_cart(self) -> Locator:
+        """The header link "My Cart (N)"."""
         return self.page.locator(self._mini_cart).first
 
     def mini_cart_count(self) -> int:
+        """N in "My Cart (N)", read now (use expect() to wait for a change)."""
         return int(re.search(r"\((\d+)\)", self.mini_cart.inner_text()).group(1))
 
     @property
     def search_box(self) -> Locator:
+        """The header search box."""
         return self.page.locator(self._search_box).first
 
     def search(self, keyword: str):
+        """Search for ``keyword`` and wait for the results page."""
         self.search_box.fill(keyword)
         self.search_box.press("Enter")
         self.page.wait_for_url(re.compile(r"/search"))

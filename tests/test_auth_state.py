@@ -11,17 +11,28 @@ from playwright.sync_api import Browser, expect
 
 pytestmark = [pytest.mark.auth, pytest.mark.high, pytest.mark.secure_login]
 
-
-def test_saved_auth_state_opens_account_without_login(browser: Browser, base_url, customer_state):
-    context = browser.new_context(base_url=base_url, storage_state=str(customer_state))
-    page = context.new_page()
-    page.goto("/account")
-    expect(page).not_to_have_url(re.compile(r"/account/login"))
-    expect(page.get_by_role("link", name=re.compile("log ?out", re.I))).to_be_visible()
-    context.close()
+LOGOUT_LINK = re.compile("log ?out", re.I)
 
 
-def test_auth_state_does_not_leak_into_other_tests(page):
+def test_saved_auth_state_opens_account_without_login(browser: Browser, base_url, customer_state, step):
+    """A context created from the saved login opens My Account without the login form."""
+    # Execution steps
+    with step("Open a new browser context with the saved login"):
+        context = browser.new_context(base_url=base_url, storage_state=str(customer_state))
+        page = context.new_page()
+    with step("Open My Account"):
+        page.goto("/account")
+    with step("Verify the account page is shown with a Log out link"):
+        expect(page).not_to_have_url(re.compile(r"/account/login"))
+        expect(page.get_by_role("link", name=LOGOUT_LINK)).to_be_visible()
+    with step("Close the context"):
+        context.close()
+
+
+def test_auth_state_does_not_leak_into_other_tests(page, step):
     """Isolation check: the default `page` fixture has its own context, so it is NOT logged in."""
-    page.goto("/account")
-    expect(page).to_have_url(re.compile(r"/account/login"))
+    # Execution steps
+    with step("Open My Account with the default page"):
+        page.goto("/account")
+    with step("Verify the login page is shown"):
+        expect(page).to_have_url(re.compile(r"/account/login"))

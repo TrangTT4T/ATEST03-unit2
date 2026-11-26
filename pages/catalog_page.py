@@ -7,8 +7,12 @@ from .base_page import BasePage
 class CatalogPage(BasePage):
     path = "/collections/all"
 
+    ############################################################################
+    # Product tile methods
+    # Scope: Catalog > All products
+    ############################################################################
     def tile(self, handle: str) -> Locator:
-        # Each product tile is a link to /products/<handle> holding name, price and "Sold Out".
+        """The tile of one product: a link to /products/<handle> with name, price and "Sold Out"."""
         return self.page.locator(self._tile.format(handle=handle)).first
 
     # --- Locators -------------------------------------------------------------

@@ -26,7 +26,8 @@ ATEST03-unit2/
     ├── test_login.py test_register.py  test_search.py   # one file per area, one marker per requirement
     ├── test_network.py          # interception, request assertion, fault injection, throttling
     ├── test_auth_state.py       # saved login + isolation check
-    └── unit/                    # framework rules (no browser): page-object layout
+    └── unit/                    # framework rules (no browser): page-object and test layout, step helper
+helper_utility/steps.py          # the `step` fixture: numbered steps -> Allure step + trace group
 ```
 
 ---
@@ -106,12 +107,18 @@ def cart_with(shop, products):
 @pytest.mark.critical
 @pytest.mark.smoke
 @pytest.mark.add_to_cart                      # requirement REQ-01
-def test_add_an_in_stock_product_to_the_cart(shop, products):
-    shop.product.open_product(products["Grey jacket"]["handle"])
-    shop.product.add_to_cart(1)               # waits for the AJAX /cart/add answer
-    cart = shop.cart.open()
-    expect(cart.mini_cart).to_have_text(re.compile(r"My Cart \(1\)"))
-    assert cart.total() == money_to_float("£55.00")
+def test_add_an_in_stock_product_to_the_cart(shop, products, step):
+    """A customer adds one in-stock product: the cart shows 1 item at the product's price."""
+    # Test data
+    grey_jacket = products["Grey jacket"]
+
+    # Execution steps
+    with step("Open the product page of Grey jacket"):
+        shop.product.open_product(grey_jacket["handle"])
+    with step("Add 1 item to the cart"):
+        shop.product.add_to_cart(1)           # waits for the AJAX /cart/add answer
+    with step("Verify the cart has 1 item, total £55.00"):
+        expect_cart(shop.cart.open(), 1, "£55.00")   # expect(mini_cart) "My Cart (1)" + total
 ```
 
 | Unit 1 | Unit 2 |
@@ -119,6 +126,34 @@ def test_add_an_in_stock_product_to_the_cart(shop, products):
 | `self.wait.until(EC.url_contains("checkout"))` | `expect(page).to_have_url(re.compile("checkout"))` |
 | `assert cart.is_empty()` after a wait | `expect(cart.quantity_inputs).to_have_count(0)` |
 | `assert error_text().strip()` | `expect(shop.login.error).to_be_visible()` |
+
+#### Test layout: test data, then numbered steps
+
+Every test reads the same way: a docstring saying what it proves, `# Test data` (plain assignments), then `# Execution steps` — only `with step("..."):` blocks. The `step` fixture (`helper_utility/steps.py`) numbers the steps itself (no `step_index` counter to keep in sync) and turns each block into:
+
+| Where | What you see |
+| --- | --- |
+| Allure report | The test as a list "Step 1: … / Step 2: … / Step 3: …", the failed step in red; the docstring is the description, the markers are tags |
+| Trace Viewer | The clicks and waits of a failed test grouped under the step name |
+| HTML / JUnit report | The error ends with `failed in Step 3: Verify the cart has 1 item, total £55.00` |
+
+Page objects follow the same idea: methods are grouped under a banner naming the area of the page, every public method has a docstring, locators stay at the bottom:
+
+```python
+class ProductPage(BasePage):
+    ############################################################################
+    # Add to cart methods
+    # Scope: Product page > Add to cart form
+    ############################################################################
+    def add_to_cart(self, quantity: int = 1):
+        """Add ``quantity`` items and wait until the store has answered every add."""
+        ...
+
+    # --- Locators -------------------------------------------------------------
+    _add_form = "form[action*='/cart/add']"
+```
+
+Both rules are framework tests (`tests/unit/test_tests_read_as_steps.py`, `tests/unit/test_page_objects_layout.py`): a test without steps or a page method without a docstring fails the run.
 
 ### 6. Isolation check
 
@@ -130,7 +165,7 @@ def test_add_an_in_stock_product_to_the_cart(shop, products):
 cd ATEST03-unit2
 pip install -r requirements.txt
 playwright install chromium
-pytest --collect-only -q          # 28 browser tests (22 in the default run) + 9 framework tests
+pytest --collect-only -q          # 28 browser tests (22 in the default run) + 24 framework tests
 pytest -m smoke                   # same smoke markers as Unit 1's tags
 pytest --headed --slowmo 300      # watch it run
 ```
@@ -262,6 +297,7 @@ Safe because every test has its own context (Day 5) and no test depends on anoth
 | --- | --- | --- |
 | HTML | pytest-html (`--html` in `pytest.ini`) | `reports/report.html` |
 | JUnit XML | `--junitxml` | `reports/junit.xml` |
+| Allure results (numbered steps) | allure-pytest (`--alluredir`); view with `allure serve reports/allure-results` (Allure CLI) | `reports/allure-results/` |
 | Trace, screenshot, video | pytest-playwright | `test-results/` |
 
 Every test carries one requirement marker (`@pytest.mark.add_to_cart` …): `pytest -m add_to_cart` runs one requirement, `pytest -m critical --collect-only -q` lists every Critical-risk test, and the markers appear in the HTML report.
@@ -323,8 +359,8 @@ pytest -m "critical and not negative"
 
 | Check | Result |
 | --- | --- |
-| `pytest` | 31 passed (22 browser + 9 framework), 6 deselected (`auth` ×2, `manual` ×3, `data_creating` ×1) |
-| `pytest -n auto` | 31 passed |
+| `pytest` | 46 passed (22 browser + 24 framework), 6 deselected (`auth` ×2, `manual` ×3, `data_creating` ×1) |
+| `pytest -n auto` | 46 passed |
 | `pytest -m auth` (with an account) | 2 passed |
 | Failed test | `test-results/<test>/trace.zip`, screenshot, video |
 
@@ -443,6 +479,7 @@ Select-String -Path tests\*.py -Pattern ':nth-child|nth=|\.nth\('               
 - [ ] Every requirement REQ-01 … REQ-08 has a test: `pytest -m <requirement> --collect-only -q`
 - [ ] Tests read like the requirement: actions and checks through page objects, no URL or CSS in tests
 - [ ] No locator outside `pages/`
+- [ ] Every test has a docstring, `# Test data`, then only `with step(...)` blocks; every page method has a docstring under a `# Scope:` banner (framework tests)
 - [ ] No fixed waits, no `force=True` (B3 searches return nothing)
 - [ ] 0 flaky tests in 3 consecutive runs (B2)
 - [ ] Every failure leaves a trace, screenshot and video
@@ -454,5 +491,5 @@ Select-String -Path tests\*.py -Pattern ':nth-child|nth=|\.nth\('               
 | Check | Result on the mock store |
 | --- | --- |
 | B3 searches | no matches |
-| 3 runs of `pytest` | 31 passed each time, 0 flaky |
+| 3 runs of `pytest` | 46 passed each time, 0 flaky |
 | Forced failure | `trace.zip`, `test-failed-1.png`, `video.webm` in `test-results/` |

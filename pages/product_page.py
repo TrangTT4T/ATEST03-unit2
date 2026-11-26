@@ -5,30 +5,45 @@ from .base_page import BasePage
 
 
 class ProductPage(BasePage):
+    ############################################################################
+    # Product detail methods
+    # Scope: Product page > Name, price, stock
+    ############################################################################
     def open_product(self, handle: str):
+        """Open /products/<handle> (the handle comes from dataset/products.json)."""
         return self.open(f"/products/{handle}")
 
     @property
     def title(self) -> Locator:
+        """The product name."""
         return self.page.locator(self._title)
 
     @property
     def price(self) -> Locator:
+        """The product price."""
         return self.page.locator(self._price)
 
     @property
     def sold_out_button(self) -> Locator:
+        """The disabled "Sold Out" button shown instead of Add to Cart."""
         return self.page.locator(self._sold_out_button)
 
+    ############################################################################
+    # Add to cart methods
+    # Scope: Product page > Add to cart form
+    ############################################################################
     @property
     def add_form(self) -> Locator:
+        """The add-to-cart form."""
         return self.page.locator(self._add_form).first
 
     @property
     def add_button(self) -> Locator:
+        """The Add to Cart button."""
         return self.add_form.locator(self._add_button).first
 
     def add_to_cart(self, quantity: int = 1):
+        """Add ``quantity`` items and wait until the store has answered every add."""
         qty = self.add_form.locator(self._quantity)
         if qty.count() and qty.first.is_visible():
             qty.first.fill(str(quantity))

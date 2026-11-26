@@ -26,7 +26,8 @@ ATEST03-unit2/
     ├── test_login.py test_register.py  test_search.py   # mỗi khu vực một file, mỗi yêu cầu một marker
     ├── test_network.py          # chặn request, kiểm tra request, giả lập lỗi, mạng chậm
     ├── test_auth_state.py       # phiên đăng nhập đã lưu + kiểm tra cô lập
-    └── unit/                    # quy tắc của framework (không mở trình duyệt): cấu trúc page object
+    └── unit/                    # quy tắc của framework (không mở trình duyệt): cấu trúc page object và test, helper step
+helper_utility/steps.py          # fixture `step`: bước đánh số -> bước Allure + nhóm trong trace
 ```
 
 ---
@@ -106,12 +107,18 @@ def cart_with(shop, products):
 @pytest.mark.critical
 @pytest.mark.smoke
 @pytest.mark.add_to_cart                      # yêu cầu REQ-01
-def test_add_an_in_stock_product_to_the_cart(shop, products):
-    shop.product.open_product(products["Grey jacket"]["handle"])
-    shop.product.add_to_cart(1)               # chờ response AJAX của /cart/add
-    cart = shop.cart.open()
-    expect(cart.mini_cart).to_have_text(re.compile(r"My Cart \(1\)"))
-    assert cart.total() == money_to_float("£55.00")
+def test_add_an_in_stock_product_to_the_cart(shop, products, step):
+    """A customer adds one in-stock product: the cart shows 1 item at the product's price."""
+    # Test data
+    grey_jacket = products["Grey jacket"]
+
+    # Execution steps
+    with step("Open the product page of Grey jacket"):
+        shop.product.open_product(grey_jacket["handle"])
+    with step("Add 1 item to the cart"):
+        shop.product.add_to_cart(1)           # chờ response AJAX của /cart/add
+    with step("Verify the cart has 1 item, total £55.00"):
+        expect_cart(shop.cart.open(), 1, "£55.00")   # expect(mini_cart) "My Cart (1)" + total
 ```
 
 | Unit 1 | Unit 2 |
@@ -119,6 +126,34 @@ def test_add_an_in_stock_product_to_the_cart(shop, products):
 | `self.wait.until(EC.url_contains("checkout"))` | `expect(page).to_have_url(re.compile("checkout"))` |
 | `assert cart.is_empty()` sau khi wait | `expect(cart.quantity_inputs).to_have_count(0)` |
 | `assert error_text().strip()` | `expect(shop.login.error).to_be_visible()` |
+
+#### Cấu trúc một test: dữ liệu test, rồi các bước được đánh số
+
+Test nào cũng đọc theo cùng một khung: docstring nói test chứng minh điều gì, `# Test data` (chỉ gán biến), rồi `# Execution steps` — chỉ gồm các khối `with step("..."):`. Fixture `step` (`helper_utility/steps.py`) tự đánh số bước (không cần biến đếm `step_index` tự cộng tay) và biến mỗi khối thành:
+
+| Ở đâu | Thấy gì |
+| --- | --- |
+| Báo cáo Allure | Test hiện thành danh sách "Step 1: … / Step 2: … / Step 3: …", bước fail tô đỏ; docstring là phần mô tả, marker là tag |
+| Trace Viewer | Các click và wait của test fail được gom dưới tên bước |
+| Báo cáo HTML / JUnit | Lỗi có thêm dòng `failed in Step 3: Verify the cart has 1 item, total £55.00` |
+
+Page object theo cùng ý: method được gom dưới banner ghi khu vực của trang, method public nào cũng có docstring, locator vẫn ở cuối class:
+
+```python
+class ProductPage(BasePage):
+    ############################################################################
+    # Add to cart methods
+    # Scope: Product page > Add to cart form
+    ############################################################################
+    def add_to_cart(self, quantity: int = 1):
+        """Add ``quantity`` items and wait until the store has answered every add."""
+        ...
+
+    # --- Locators -------------------------------------------------------------
+    _add_form = "form[action*='/cart/add']"
+```
+
+Hai quy tắc này là test framework (`tests/unit/test_tests_read_as_steps.py`, `tests/unit/test_page_objects_layout.py`): test thiếu step hoặc method page thiếu docstring sẽ làm lần chạy fail.
 
 ### 6. Kiểm tra tính cô lập
 
@@ -130,7 +165,7 @@ def test_add_an_in_stock_product_to_the_cart(shop, products):
 cd ATEST03-unit2
 pip install -r requirements.txt
 playwright install chromium
-pytest --collect-only -q          # 28 test trình duyệt (22 chạy mặc định) + 9 test framework
+pytest --collect-only -q          # 28 test trình duyệt (22 chạy mặc định) + 24 test framework
 pytest -m smoke                   # cùng tag smoke như Unit 1
 pytest --headed --slowmo 300      # xem trình duyệt chạy
 ```
@@ -262,6 +297,7 @@ An toàn vì mỗi test có context riêng (Day 5) và không test nào phụ th
 | --- | --- | --- |
 | HTML | pytest-html (`--html` trong `pytest.ini`) | `reports/report.html` |
 | JUnit XML | `--junitxml` | `reports/junit.xml` |
+| Kết quả Allure (bước đánh số) | allure-pytest (`--alluredir`); xem bằng `allure serve reports/allure-results` (Allure CLI) | `reports/allure-results/` |
 | Trace, ảnh, video | pytest-playwright | `test-results/` |
 
 Test nào cũng mang một marker yêu cầu (`@pytest.mark.add_to_cart` …): `pytest -m add_to_cart` chạy riêng một yêu cầu, `pytest -m critical --collect-only -q` liệt kê mọi test rủi ro Critical, và marker hiện trong báo cáo HTML.
@@ -323,8 +359,8 @@ pytest -m "critical and not negative"
 
 | Kiểm tra | Kết quả |
 | --- | --- |
-| `pytest` | 31 pass (22 trình duyệt + 9 framework), 6 bị lọc (`auth` ×2, `manual` ×3, `data_creating` ×1) |
-| `pytest -n auto` | 31 pass |
+| `pytest` | 46 pass (22 trình duyệt + 24 framework), 6 bị lọc (`auth` ×2, `manual` ×3, `data_creating` ×1) |
+| `pytest -n auto` | 46 pass |
 | `pytest -m auth` (có tài khoản) | 2 pass |
 | Test fail | `test-results/<test>/trace.zip`, ảnh, video |
 
@@ -443,6 +479,7 @@ Select-String -Path tests\*.py -Pattern ':nth-child|nth=|\.nth\('               
 - [ ] Yêu cầu REQ-01 … REQ-08 nào cũng có test: `pytest -m <yêu_cầu> --collect-only -q`
 - [ ] Test đọc giống yêu cầu: thao tác và kiểm tra qua page object, không URL hay CSS trong test
 - [ ] Không có locator ngoài `pages/`
+- [ ] Test nào cũng có docstring, `# Test data`, rồi chỉ các khối `with step(...)`; method page nào cũng có docstring dưới banner `# Scope:` (test framework)
 - [ ] Không chờ cố định, không `force=True` (lệnh tìm ở B3 không ra kết quả)
 - [ ] 0 test flaky trong 3 lần chạy liên tiếp (B2)
 - [ ] Mỗi lần fail đều có trace, ảnh và video
@@ -454,5 +491,5 @@ Select-String -Path tests\*.py -Pattern ':nth-child|nth=|\.nth\('               
 | Kiểm tra | Kết quả trên site giả lập |
 | --- | --- |
 | Lệnh tìm ở B3 | không có kết quả |
-| 3 lần chạy `pytest` | mỗi lần 31 pass, 0 flaky |
+| 3 lần chạy `pytest` | mỗi lần 46 pass, 0 flaky |
 | Cố ý làm fail | `trace.zip`, `test-failed-1.png`, `video.webm` trong `test-results/` |

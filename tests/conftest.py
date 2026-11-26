@@ -12,9 +12,11 @@ Fixture map (Day 5-6):
   shop               Page Objects bound to this test's page
   cart_with          factory fixture: put N of a product in the cart
   customer_state     login once, reuse the saved storage state (auth)
+  step               numbered test steps: Allure step + trace group (helper_utility/steps.py)
 """
 import json
 import os
+import shutil
 from pathlib import Path
 from types import SimpleNamespace
 from urllib.parse import urlparse
@@ -22,6 +24,7 @@ from urllib.parse import urlparse
 import pytest
 from playwright.sync_api import Browser, BrowserContext, Page
 
+from helper_utility.steps import Steps
 from pages import BasePage, CartPage, CatalogPage, CheckoutPage, LoginPage, ProductPage, RegisterPage, SearchPage
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -31,6 +34,18 @@ SHOPIFY_SUFFIXES = (".shopify.com", ".myshopify.com", ".shopifycdn.com", ".shopi
 # Third-party hosts the THEME needs to work. The shop loads jQuery from Google's CDN; blocked, the
 # product page never renders its "Sold Out" button (found 2026-11-25). Tracking hosts stay blocked.
 THEME_DEPENDENCIES = ("ajax.googleapis.com",)
+ALLURE_RESULTS = ROOT / "reports" / "allure-results"
+
+
+# --- reports ------------------------------------------------------------------
+def pytest_configure(config):
+    """Start every run with an empty Allure folder, so the report shows this run only.
+
+    Done here on the controller, not with --clean-alluredir: under pytest -n every xdist worker
+    would clean the folder, and a late worker could delete what an early one already wrote.
+    """
+    if not hasattr(config, "workerinput"):
+        shutil.rmtree(ALLURE_RESULTS, ignore_errors=True)
 
 
 # --- data ---------------------------------------------------------------------
@@ -95,6 +110,14 @@ def cart_with(shop, products):
         shop.product.add_to_cart(quantity)
         return shop.cart.open()
     return _add
+
+
+# --- test steps ---------------------------------------------------------------
+@pytest.fixture
+def step(request) -> Steps:
+    """``with step("Add 1 item to the cart"):`` - numbered for you: Step 1, Step 2, ..."""
+    page = request.getfixturevalue("page") if "page" in request.fixturenames else None
+    return Steps(page)
 
 
 # --- authentication state (Day 6) ------------------------------------------------

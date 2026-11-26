@@ -40,7 +40,8 @@ ATEST03-unit2/
 │   ├── test_search.py           # @search_products                  (Medium)
 │   ├── test_network.py          # interception, fault injection, throttling
 │   ├── test_auth_state.py       # saved login (needs a real account)
-│   └── unit/                    # framework rules: page-object layout (no browser)
+│   └── unit/                    # framework rules (no browser): page-object and test layout, step helper
+├── helper_utility/steps.py      # the `step` fixture: numbered steps -> Allure step + trace group
 └── docs/Unit2_Playwright_vi.md, Unit2_Playwright_en.md
 ```
 
@@ -49,7 +50,7 @@ ATEST03-unit2/
 ```bash
 pip install -r requirements.txt
 playwright install chromium
-pytest                               # 22 browser tests + 9 framework tests; manual/data_creating/auth excluded
+pytest                               # 22 browser tests + 24 framework tests; manual/data_creating/auth excluded
 pytest -m smoke
 pytest -m critical                   # every Critical-risk test
 pytest -m add_to_cart                # every test of one requirement
@@ -57,6 +58,27 @@ pytest -n auto                       # parallel
 pytest -m auth                       # needs SAUCE_EMAIL / SAUCE_PASSWORD
 pytest tests/test_cart.py --headed --slowmo 300
 playwright show-trace test-results/<test>/trace.zip
+```
+
+## How a test reads
+
+Every test: a docstring, `# Test data`, then `# Execution steps` made only of `with step("..."):` blocks. Steps are numbered automatically and show up in the Allure report, in the Playwright trace and in the error message of a failure (`failed in Step 3: ...`). Page methods are grouped under `####` banners with `# Scope: <area of the page>`, each with a docstring; locators stay at the bottom. Framework tests enforce both.
+
+```python
+@pytest.mark.smoke
+@pytest.mark.add_to_cart
+def test_add_an_in_stock_product_to_the_cart(shop, products, step):
+    """A customer adds one in-stock product: the cart shows 1 item at the product's price."""
+    # Test data
+    grey_jacket = products["Grey jacket"]
+
+    # Execution steps
+    with step("Open the product page of Grey jacket"):
+        shop.product.open_product(grey_jacket["handle"])
+    with step("Add 1 item to the cart"):
+        shop.product.add_to_cart(1)
+    with step("Verify the cart has 1 item, total £55.00"):
+        expect_cart(shop.cart.open(), 1, "£55.00")
 ```
 
 ## Reports
@@ -67,6 +89,7 @@ Every run writes:
 | --- | --- | --- |
 | HTML report | `reports/report.html` | trainer, BA, PO |
 | JUnit XML | `reports/junit.xml` | CI test tab |
+| Allure results: numbered steps, docstring, markers as tags | `reports/allure-results/` (`allure serve reports/allure-results`, needs the Allure CLI) | trainer, BA, PO |
 | Trace, screenshot, video of failed tests | `test-results/` | debugging |
 
 Every test carries one requirement marker (`@pytest.mark.add_to_cart` …, declared in `pytest.ini`): `pytest -m add_to_cart` runs one requirement, and the markers appear in the HTML report. `--strict-markers` rejects a marker typo such as `add_to_card`.
