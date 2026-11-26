@@ -70,11 +70,36 @@ A context costs milliseconds, so every test gets a clean cart without restarting
 | Priority | Locator | Example in `pages/` |
 | --- | --- | --- |
 | 1 | Role + accessible name | `role=link[name=/My Cart \(\d+\)/]` (mini cart) |
-| 2 | Semantic attribute | `[itemprop='name']` (product title: the first `<h1>` on the page is the logo) |
+| 2 | Semantic attribute | `css=[itemprop='name']` (product title: the first `<h1>` on the page is the logo) |
 | 3 | Text | `text=No results found for` |
-| 4 | Stable attribute / form action | `form[action*='/cart/add']`, `input[name^='updates']` |
+| 4 | Stable attribute / form action | `css=form[action*='/cart/add']`, `css=input[name^='updates']`, `name=update` |
 | 5 | Filtered locator | `#cart` rows `.filter(has=role=link[name='Striped top' s])` — scoped to `#cart`: every page also holds a hidden mini-cart with the same rows |
 | Never | Position | `:nth-child`, `xpath=(//a)[3]` |
+
+#### Locator strings and the custom BasePage methods
+
+Locators are strings with a strategy prefix, written the same way as in the Unit 1 (Selenium) repository. `parse_locator()` in `pages/base_page.py` turns them into Playwright selectors:
+
+| Locator string | Playwright selector |
+| --- | --- |
+| `css=#cart`, `xpath=//h1`, `text=...`, `role=...`, `id=product-price`, `data-testid=...` | passed through (Playwright's own engines) |
+| `name=q` | `css=[name='q']` |
+| `tag=html`, `class=errors` | `css=html`, `css=.errors` |
+| `link=Forgot your password?` | `role=link[name='Forgot your password?' s]` (exact) |
+| `partial_link=password` | `role=link[name=/password/]` (contains, case-sensitive like Selenium) |
+| `//h1` / `input[name='q']` (no prefix) | `xpath=//h1` / `css=input[name='q']` |
+
+Pages never call `self.page`: they pass locator strings to the `BasePage` methods, which log the action (shown in the report of a failed test, passwords as `***`) and fail with a message that names the locator:
+
+| Group | Methods |
+| --- | --- |
+| Navigation | `open(path)`, `url`, `wait_for_url_contains(fragment)` |
+| Locators | `locator(template, **values)`, `find_element(*locators, first=False)` (chained: `find_element(self._root, self._update_button)`; the first item may be a Locator scope), `count_elements`, `is_element_present` |
+| Actions | `click_element`, `click_and_wait_for_new_page` (form buttons), `click_and_wait_for_response(..., url_part=)` (AJAX), `type_text(..., text=, secret=False)`, `press_enter` |
+| Read and state | `get_text`, `get_input_value`, `is_element_visible(..., timeout=0)`, `is_element_enabled(..., timeout=0)` — wait for the state up to `timeout` seconds, never a fixed sleep |
+| Checks (`expect()`, raise `AssertionError`) | `element_should_be_visible`, `element_should_be_disabled`, `element_should_contain_text`, `element_should_have_count` — each takes an optional `error_msg` |
+
+`tests/unit/test_page_objects_layout.py` fails the run on a locator that `parse_locator()` rejects or on `self.page` outside `BasePage`; `tests/unit/test_locators.py` checks every prefix, and `tests/unit/test_base_page_methods.py` runs the methods in Chromium against local HTML (no network).
 
 ### 4. Fixtures (`tests/conftest.py`)
 
@@ -165,7 +190,7 @@ Both rules are framework tests (`tests/unit/test_tests_read_as_steps.py`, `tests
 cd ATEST03-unit2
 pip install -r requirements.txt
 playwright install chromium
-pytest --collect-only -q          # 28 browser tests (22 in the default run) + 24 framework tests
+pytest --collect-only -q          # 28 browser tests (22 in the default run) + 61 framework tests
 pytest -m smoke                   # same smoke markers as Unit 1's tags
 pytest --headed --slowmo 300      # watch it run
 ```
@@ -323,7 +348,7 @@ The lab automates the Unit 1 risk priorities on Playwright: 22 browser tests in 
 | --- | --- | --- | --- | --- |
 | P1 | Add to cart, totals, change, remove | R01 Critical (20) | 5 tests in `test_cart.py` + 3 network tests | `cart_with` fixture, `expect_request`, 500 fault injection |
 | P1 | Cart → checkout | R02 Critical (15) | 1 test in `test_checkout.py` | `expect(page).to_have_url` |
-| P1 | Product detail, sold-out | R03 High (12) | 2 tests in `test_catalog.py` | `[itemprop='name']`, `to_be_disabled()` |
+| P1 | Product detail, sold-out | R03 High (12) | 2 tests in `test_catalog.py` | `css=[itemprop='name']`, `to_be_disabled()` |
 | P1 | Login, password reset, saved session | R04 High (12) | password reset + 2 auth tests; 2 invalid-login tests are `manual` (CAPTCHA) | `customer_state` storage state |
 | P1 | Catalog prices and stock | R05 High (12) | 7 parametrized cases (one per product) + slow-network test | `parametrize`, CDP throttling |
 | P2 | Registration validation | R06 Medium (9) | 1 `manual` test (CAPTCHA) + 1 `data_creating` test | — |
@@ -359,8 +384,8 @@ pytest -m "critical and not negative"
 
 | Check | Result |
 | --- | --- |
-| `pytest` | 46 passed (22 browser + 24 framework), 6 deselected (`auth` ×2, `manual` ×3, `data_creating` ×1) |
-| `pytest -n auto` | 46 passed |
+| `pytest` | 83 passed (22 browser + 61 framework), 6 deselected (`auth` ×2, `manual` ×3, `data_creating` ×1) |
+| `pytest -n auto` | 83 passed |
 | `pytest -m auth` (with an account) | 2 passed |
 | Failed test | `test-results/<test>/trace.zip`, screenshot, video |
 
@@ -491,5 +516,5 @@ Select-String -Path tests\*.py -Pattern ':nth-child|nth=|\.nth\('               
 | Check | Result on the mock store |
 | --- | --- |
 | B3 searches | no matches |
-| 3 runs of `pytest` | 46 passed each time, 0 flaky |
+| 3 runs of `pytest` | 83 passed each time, 0 flaky |
 | Forced failure | `trace.zip`, `test-failed-1.png`, `video.webm` in `test-results/` |

@@ -11,7 +11,7 @@ Unit 2 is **plain Playwright**: tests are pytest functions that drive page objec
 | Requirements REQ-01 … REQ-08 and their risks | Every test carries one requirement marker, e.g. `@pytest.mark.add_to_cart` (declared in `pytest.ini`) |
 | Gherkin tags `@critical` `@smoke` `@negative` | pytest markers with the same names, declared in `pytest.ini` (`--strict-markers`) |
 | `dataset/products.json` | Same file |
-| Page Object pattern, one class per file, locators at the bottom | `pages/` with Playwright locators and auto-waiting |
+| Page Object pattern, one class per file, locator strings (`css=`, `xpath=`, `name=` …) at the bottom, custom BasePage methods | Same layout and locator syntax; BasePage methods on Playwright's auto-waiting |
 | Hooks in `environment.py` | Fixtures in `tests/conftest.py` |
 | Screenshot on failure | Trace + screenshot + video on failure |
 | — | Network interception, fault injection, throttling, saved auth state, parallel runs, flaky reruns |
@@ -29,7 +29,8 @@ ATEST03-unit2/
 ├── requirements.txt
 ├── dataset/
 │   └── products.json            # Unit 1 test data
-├── pages/                       # Playwright Page Objects: one class per file
+├── pages/                       # Page Objects: one class per file, locator strings at the bottom;
+│                                #   base_page.py = parse_locator() + click/type/wait/check methods
 ├── tests/
 │   ├── conftest.py              # fixtures, network control, auth state
 │   ├── test_cart.py             # @add_to_cart, @update_cart        (Critical)
@@ -47,10 +48,12 @@ ATEST03-unit2/
 
 ## Run
 
+Requires **Python 3.12**: the version in `.python-version` (PyCharm, VS Code, pyenv and uv pick it up), the same in every ATEST03 repository.
+
 ```bash
 pip install -r requirements.txt
 playwright install chromium
-pytest                               # 22 browser tests + 24 framework tests; manual/data_creating/auth excluded
+pytest                               # 22 browser tests + 61 framework tests; manual/data_creating/auth excluded
 pytest -m smoke
 pytest -m critical                   # every Critical-risk test
 pytest -m add_to_cart                # every test of one requirement
@@ -59,6 +62,10 @@ pytest -m auth                       # needs SAUCE_EMAIL / SAUCE_PASSWORD
 pytest tests/test_cart.py --headed --slowmo 300
 playwright show-trace test-results/<test>/trace.zip
 ```
+
+## Page objects
+
+Locators are strings with a strategy prefix, the same syntax as Unit 1: `"css=#cart"`, `"xpath=//h1"`, `"role=button[name='Sold Out']"`, `"name=q"`, `"link=Forgot your password?"`, declared at the bottom of each page class. `parse_locator()` turns them into Playwright selectors. Pages never touch `self.page`: they call the `BasePage` methods (`find_element`, `click_element`, `type_text`, `click_and_wait_for_response`, `is_element_enabled`, `element_should_be_disabled` …), which log the action and fail with the locator's name. Details: Day 5 section 3 of the unit document.
 
 ## How a test reads
 
