@@ -1,5 +1,4 @@
 {
-  "_comment": "Test data for https://sauce-demo.myshopify.com (surveyed 2026-11-03). Never derive a URL from a product name: Black heels lives at 'flower-print-jeans'.",
   "products": {
     "Black heels":    {"handle": "flower-print-jeans", "price": "£45.00", "status": "available"},
     "Bronze sandals": {"handle": "bronze-sandals",     "price": "£39.99", "status": "available"},
