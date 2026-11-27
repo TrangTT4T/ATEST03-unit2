@@ -31,7 +31,8 @@ ATEST03-unit2/
 │   └── products.json            # Unit 1 test data
 ├── .env.example                 # account variables to copy into .env (git ignores .env: never pushed)
 ├── api/                         # API objects, one class per area like pages/: BaseApi (logged GET/POST),
-│                                #   ProductApi, CartApi, SearchApi (Shopify AJAX API); endpoints at the bottom
+│                                #   ProductApi, CartApi, SearchApi (Shopify AJAX API), NetworkApi (page traffic);
+│                                #   all request handling lives here, tests only call and check
 ├── pages/                       # Page Objects: one class per file, locator strings at the bottom;
 │                                #   BasePage = find_element(s), click/type/wait methods, money_to_float()
 ├── tests/

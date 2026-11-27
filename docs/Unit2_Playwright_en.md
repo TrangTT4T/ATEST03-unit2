@@ -258,24 +258,23 @@ pytest --tracing on                                          # keep traces for e
 
 #### 2.1 Block third-party traffic (autouse fixture)
 
+The request handling lives in `api/` (`CartApi`, `NetworkApi`); the tests and fixtures only call it and check the result.
+
 ```python
+# tests/ui/conftest.py - the fixture only calls NetworkApi
 @pytest.fixture(autouse=True)
-def block_third_party(request, context: BrowserContext, base_url: str):
-    blocked: list[str] = []
-    if request.node.get_closest_marker("allow_third_party"):
-        yield blocked
+def block_third_party(request, base_url: str):
+    if request.node.get_closest_marker("allow_third_party") or "page" not in request.fixturenames:
+        yield []
         return
-    store_host = urlparse(base_url).hostname
+    page = request.getfixturevalue("page")
+    yield NetworkApi(page.context.request, page).block_third_party_hosts(urlparse(base_url).hostname)
 
-    def handle(route):
-        if _is_allowed_host(route.request.url, store_host):
-            route.continue_()
-        else:
-            blocked.append(route.request.url)
-            route.abort()
-
-    context.route("**/*", handle)
-    yield blocked
+# api/network_api.py - the request handling itself
+def block_third_party_hosts(self, store_host: str) -> list[str]:
+    blocked: list[str] = []
+    self.page.context.route("**/*", partial(self._abort_or_continue, store_host=store_host, blocked=blocked))
+    return blocked
 ```
 
 Allowed: the store host and `*.shopify.com`, `*.myshopify.com`, `*.shopifycdn.com`. Everything else (Facebook, Twitter, Pinterest, the Sauce app) is aborted. Risk R09 (third-party widgets), manual in Unit 1, becomes testable.
@@ -284,18 +283,18 @@ Allowed: the store host and `*.shopify.com`, `*.myshopify.com`, `*.shopifycdn.co
 
 | Test | Technique | Risk |
 | --- | --- | --- |
-| `test_third_party_calls_are_blocked_and_shop_still_works` | `context.route` + abort, then the cart flow | R09 |
-| `test_add_to_cart_posts_the_product_form` | `page.expect_request(...)`: assert method and body | R01 |
-| `test_failed_add_to_cart_request_does_not_add_the_product` | `page.route(...).fulfill(status=500)`: fault injection | R01 |
-| `test_catalog_loads_on_a_slow_network` | Chromium CDP `Network.emulateNetworkConditions` (400 ms latency) | R05 |
+| `test_third_party_calls_are_blocked_and_shop_still_works` | `NetworkApi.block_third_party_hosts` (route + abort), `NetworkApi.can_page_reach`, then the cart flow | R09 |
+| `test_add_to_cart_posts_the_product_form` | `CartApi.capture_add_to_cart_request()` (expect_request), `CartApi.request_carries_product_id` | R01 |
+| `test_failed_add_to_cart_request_does_not_add_the_product` | `CartApi.answer_add_to_cart_with_error(500)` (route + fulfill): fault injection | R01 |
+| `test_catalog_loads_on_a_slow_network` | `NetworkApi.throttle_network` (Chromium CDP, 400 ms latency) | R05 |
 
 Network tests carry a risk marker and a requirement marker like every other test (`@pytest.mark.critical`, `@pytest.mark.add_to_cart`).
 
 ```python
-page.route("**/cart/add*", lambda route: route.fulfill(status=500, body="Internal Server Error"))
+shop_api_in_browser.cart.answer_add_to_cart_with_error(500)   # api/cart_api.py routes the request
 shop.product.open_product_page(products["Noir jacket"]["path-name"])
 shop.product.add_to_cart_button.click()
-page.unroute("**/cart/add*")
+shop_api_in_browser.cart.stop_answering_add_to_cart()
 shop.cart.open_page()
 expect(shop.cart.quantity_boxes).to_have_count(0)
 ```
@@ -310,11 +309,13 @@ The store's pages call a JSON API (the Shopify AJAX API). Testing it directly is
 | `ProductApi` | `request_product(path_name)` | `GET /products/<path-name>.js` |
 | `CartApi` | `add_product_to_cart(path_name, quantity)`, `get_cart()`, `change_cart_line_quantity(line, quantity)` | `POST /cart/add.js`, `GET /cart.js`, `POST /cart/change.js` |
 | `SearchApi` | `search_product_titles(keyword)` | `GET /search/suggest.json` |
+| `CartApi` (page traffic) | `capture_add_to_cart_request()`, `request_carries_product_id(request)`, `answer_add_to_cart_with_error(status)`, `stop_answering_add_to_cart()` | the page's `POST /cart/add` |
+| `NetworkApi` | `block_third_party_hosts(store_host)`, `can_page_reach(url)`, `throttle_network(...)` | the page's traffic (route, fetch, Chromium DevTools) |
 
 | Fixture | Where | Request context | Used for |
 | --- | --- | --- | --- |
 | `shop_api` | `tests/api/conftest.py` | its own (`playwright.request.new_context`): no browser, its own cart | API tests: `shop_api.product`, `shop_api.cart`, `shop_api.search` (like `shop` for pages) |
-| `shop_api_in_browser` | `tests/ui/conftest.py` | the page's (`page.context.request`): shares the browser's cookies | UI tests that use the API for the set-up |
+| `shop_api_in_browser` | `tests/ui/conftest.py` | the page's (`page.context.request`) + the page: shares the browser's cookies | UI tests: API set-up, `.cart` page traffic, `.network` |
 
 | Test | Checks | Requirement |
 | --- | --- | --- |

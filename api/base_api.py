@@ -1,16 +1,19 @@
 """Base API object: the request context and the logged GET/POST every API object uses.
 
 The store's pages call a JSON API (the Shopify AJAX API). Each area has its own API object, the
-same split as pages/: ProductApi, CartApi, SearchApi. Every call is logged with its status.
+same split as pages/: ProductApi, CartApi, SearchApi, plus NetworkApi for the browser's traffic.
+Every call is logged with its status. Tests only call these methods and check the result; no test
+sends, routes or reads a request itself.
 """
 import logging
 
-from playwright.sync_api import APIRequestContext, APIResponse
+from playwright.sync_api import APIRequestContext, APIResponse, Page
 
 
 class BaseApi:
-    def __init__(self, request: APIRequestContext):
+    def __init__(self, request: APIRequestContext, page: Page | None = None):
         self.request = request  # its own API context, or page.context.request to share the browser's cart
+        self.page = page  # the browser page whose traffic this object watches or changes (UI tests only)
         self.logger = logging.getLogger(type(self).__name__)
 
     ############################################################################

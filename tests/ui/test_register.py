@@ -24,7 +24,8 @@ def test_registration_is_rejected_without_an_email(shop, accounts, step):
     with step("Open the registration page"):
         shop.register.open_page()
     with step(f"Register as {customer['first_name']} {customer['last_name']} with no email"):
-        shop.register.register_account(customer["first_name"], customer["last_name"], customer["email"], customer["password"])
+        shop.register.register_account(customer["first_name"], customer["last_name"], customer["email"],
+                                       customer["password"])
     with step("Verify an error is shown"):
         expect(shop.register.error_message).to_be_visible()
 

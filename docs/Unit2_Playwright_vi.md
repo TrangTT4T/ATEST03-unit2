@@ -258,24 +258,23 @@ pytest --tracing on                                           # giữ trace cho 
 
 #### 2.1 Chặn request bên thứ ba (fixture autouse)
 
+Phần xử lý request nằm trong `api/` (`CartApi`, `NetworkApi`); test và fixture chỉ gọi method rồi kiểm tra kết quả.
+
 ```python
+# tests/ui/conftest.py - the fixture only calls NetworkApi
 @pytest.fixture(autouse=True)
-def block_third_party(request, context: BrowserContext, base_url: str):
-    blocked: list[str] = []
-    if request.node.get_closest_marker("allow_third_party"):
-        yield blocked
+def block_third_party(request, base_url: str):
+    if request.node.get_closest_marker("allow_third_party") or "page" not in request.fixturenames:
+        yield []
         return
-    store_host = urlparse(base_url).hostname
+    page = request.getfixturevalue("page")
+    yield NetworkApi(page.context.request, page).block_third_party_hosts(urlparse(base_url).hostname)
 
-    def handle(route):
-        if _is_allowed_host(route.request.url, store_host):
-            route.continue_()
-        else:
-            blocked.append(route.request.url)
-            route.abort()
-
-    context.route("**/*", handle)
-    yield blocked
+# api/network_api.py - the request handling itself
+def block_third_party_hosts(self, store_host: str) -> list[str]:
+    blocked: list[str] = []
+    self.page.context.route("**/*", partial(self._abort_or_continue, store_host=store_host, blocked=blocked))
+    return blocked
 ```
 
 Cho phép: host của store và `*.shopify.com`, `*.myshopify.com`, `*.shopifycdn.com`. Mọi host khác (Facebook, Twitter, Pinterest, ứng dụng Sauce) bị hủy. Rủi ro R09 (widget bên thứ ba), vốn kiểm thủ công ở Unit 1, giờ test được.
@@ -284,18 +283,18 @@ Cho phép: host của store và `*.shopify.com`, `*.myshopify.com`, `*.shopifycd
 
 | Test | Kỹ thuật | Risk |
 | --- | --- | --- |
-| `test_third_party_calls_are_blocked_and_shop_still_works` | `context.route` + abort, rồi chạy luồng giỏ hàng | R09 |
-| `test_add_to_cart_posts_the_product_form` | `page.expect_request(...)`: kiểm tra method và body | R01 |
-| `test_failed_add_to_cart_request_does_not_add_the_product` | `page.route(...).fulfill(status=500)`: giả lập lỗi server | R01 |
-| `test_catalog_loads_on_a_slow_network` | CDP của Chromium `Network.emulateNetworkConditions` (trễ 400 ms) | R05 |
+| `test_third_party_calls_are_blocked_and_shop_still_works` | `NetworkApi.block_third_party_hosts` (route + abort), `NetworkApi.can_page_reach`, rồi chạy luồng giỏ hàng | R09 |
+| `test_add_to_cart_posts_the_product_form` | `CartApi.capture_add_to_cart_request()` (expect_request), `CartApi.request_carries_product_id` | R01 |
+| `test_failed_add_to_cart_request_does_not_add_the_product` | `CartApi.answer_add_to_cart_with_error(500)` (route + fulfill): giả lập lỗi | R01 |
+| `test_catalog_loads_on_a_slow_network` | `NetworkApi.throttle_network` (Chromium CDP, trễ 400 ms) | R05 |
 
 Test network cũng mang marker rủi ro và marker yêu cầu như mọi test khác (`@pytest.mark.critical`, `@pytest.mark.add_to_cart`).
 
 ```python
-page.route("**/cart/add*", lambda route: route.fulfill(status=500, body="Internal Server Error"))
+shop_api_in_browser.cart.answer_add_to_cart_with_error(500)   # api/cart_api.py routes the request
 shop.product.open_product_page(products["Noir jacket"]["path-name"])
 shop.product.add_to_cart_button.click()
-page.unroute("**/cart/add*")
+shop_api_in_browser.cart.stop_answering_add_to_cart()
 shop.cart.open_page()
 expect(shop.cart.quantity_boxes).to_have_count(0)
 ```
@@ -310,11 +309,13 @@ Các trang của store gọi một API JSON (Shopify AJAX API). Test thẳng API
 | `ProductApi` | `request_product(path_name)` | `GET /products/<path-name>.js` |
 | `CartApi` | `add_product_to_cart(path_name, quantity)`, `get_cart()`, `change_cart_line_quantity(line, quantity)` | `POST /cart/add.js`, `GET /cart.js`, `POST /cart/change.js` |
 | `SearchApi` | `search_product_titles(keyword)` | `GET /search/suggest.json` |
+| `CartApi` (traffic của page) | `capture_add_to_cart_request()`, `request_carries_product_id(request)`, `answer_add_to_cart_with_error(status)`, `stop_answering_add_to_cart()` | `POST /cart/add` của page |
+| `NetworkApi` | `block_third_party_hosts(store_host)`, `can_page_reach(url)`, `throttle_network(...)` | traffic của page (route, fetch, Chromium DevTools) |
 
 | Fixture | Ở đâu | Request context | Dùng cho |
 | --- | --- | --- | --- |
 | `shop_api` | `tests/api/conftest.py` | riêng (`playwright.request.new_context`): không trình duyệt, giỏ riêng | test API: `shop_api.product`, `shop_api.cart`, `shop_api.search` (giống `shop` cho page) |
-| `shop_api_in_browser` | `tests/ui/conftest.py` | của page (`page.context.request`): dùng chung cookie với trình duyệt | test giao diện dùng API để chuẩn bị dữ liệu |
+| `shop_api_in_browser` | `tests/ui/conftest.py` | của page (`page.context.request`) + page: dùng chung cookie với trình duyệt | test giao diện: chuẩn bị dữ liệu bằng API, traffic `.cart`, `.network` |
 
 | Test | Kiểm tra | Yêu cầu |
 | --- | --- | --- |
