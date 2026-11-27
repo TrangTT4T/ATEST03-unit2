@@ -1,7 +1,13 @@
-"""Numbered test steps: every action or check of a test is one ``with step("..."):`` block.
+"""Numbered test steps: every action or check of a test is one ``with step(step_number, "..."):`` block.
 
-    with step("Open the product page of Grey jacket"):
+The test counts its own steps, like the workplace pattern ``with allure.step(f"Step {step_index}: ...")``:
+
+    step_number = 1
+    with step(step_number, "Open the product page of Grey jacket"):
         shop.product.open_product_page(grey_jacket["path-name"])
+    step_number += 1
+    with step(step_number, "Add 1 item to the cart"):
+        shop.product.add_to_cart(1)
 
 Each block becomes:
 
@@ -12,7 +18,9 @@ Each block becomes:
 * a note on the error when the block fails ("failed in Step 2: ..."), so the HTML and JUnit
   reports name the step too.
 
-Numbering is automatic: there is no ``step_index`` counter to keep in sync when a step is added.
+The fixture checks the counter: the steps of a test must be numbered 1, 2, 3 ... A forgotten
+``step_number += 1`` (two steps called "Step 2") or a skipped number stops the test with a clear
+error instead of giving a report with wrong numbers.
 """
 import contextlib
 from collections.abc import Iterator
@@ -23,16 +31,25 @@ from playwright.sync_api import Page
 
 
 class Steps:
-    """The ``step`` fixture: call it with a title to open the next numbered step of one test."""
+    """The ``step`` fixture: call it with the step number and a title to open that step of one test."""
 
     def __init__(self, page: Page | None = None):
         self.page = page  # None: a test without the shared page (no trace to group)
-        self.number = 0
+        self.number = 0  # the number of the last step opened
 
     @contextlib.contextmanager
-    def __call__(self, title: str) -> Iterator[None]:
-        self.number += 1
-        label = f"Step {self.number}: {title}"
+    def __call__(self, number: int, title: str) -> Iterator[None]:
+        """Open Step ``number``: an Allure step, a trace group, and a note on the error if it fails.
+
+        :param number: the test's step counter: 1 for the first step, then step_number += 1
+        :param title: what the step does or checks, e.g. "Verify the cart has 2 items"
+        :raises ValueError: when ``number`` is not the next number (a step skipped or counted twice)
+        """
+        if number != self.number + 1:
+            raise ValueError(f"Step {number} ({title!r}) follows Step {self.number}: number the steps 1, 2, 3 ... "
+                             f"(step_number = 1 before the first step, step_number += 1 before each next one)")
+        self.number = number
+        label = f"Step {number}: {title}"
         with allure.step(label):
             grouped = self._open_trace_group(label)
             try:

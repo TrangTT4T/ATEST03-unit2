@@ -33,7 +33,8 @@ ATEST03-unit2/
 │   └── search.json              #   matching keywords and keywords with no match
 ├── .env.example                 # SAUCE_EMAIL / SAUCE_PASSWORD only, for -m auth (git ignores .env: never pushed)
 ├── api/                         # API objects, one class per area like pages/: BaseApi (logged GET/POST),
-│                                #   ProductApi, CartApi, SearchApi (Shopify AJAX API), NetworkApi (page traffic);
+│                                #   ProductApi, CartApi, SearchApi (Shopify AJAX API), AccountApi (login, logout,
+│                                #   register, password reset forms), NetworkApi (page traffic);
 │                                #   all request handling lives here, tests only call and check
 ├── pages/                       # Page Objects: one class per file, locator strings at the bottom;
 │                                #   BasePage = find_element(s), click/type/wait methods (timeouts name the step), bot check
@@ -44,7 +45,7 @@ ATEST03-unit2/
 │   │   ├── test_cart.py         # @add_to_cart, @update_cart        (Critical)
 │   │   ├── test_checkout.py     # @start_checkout                   (Critical)
 │   │   ├── test_catalog.py      # @browse_catalog, @product_details (High)
-│   │   ├── test_login.py        # @secure_login                     (High)
+│   │   ├── test_login.py        # @secure_login: header links, login, logout, password reset (High)
 │   │   ├── test_register.py     # @create_account                   (Medium)
 │   │   ├── test_search.py       # @search_products                  (Medium)
 │   │   ├── test_network.py      # interception, fault injection, throttling
@@ -53,7 +54,8 @@ ATEST03-unit2/
 │       ├── conftest.py          # shop_api: shop_api.product / .cart / .search
 │       ├── test_product_api.py  # @product_details
 │       ├── test_cart_api.py     # @add_to_cart, @update_cart (+ finding A1)
-│       └── test_search_api.py   # @search_products
+│       ├── test_search_api.py   # @search_products
+│       └── test_account_api.py  # @secure_login, @create_account (login, logout, register)
 ├── helper_utility/helpers.py    # class Helper: by_locator(), read_test_data(), money_to_float/pence(), random_customer() (Faker)
 ├── helper_utility/steps.py      # the `step` fixture: numbered steps -> Allure step + trace group
 └── docs/Unit2_Playwright_vi.md, Unit2_Playwright_en.md
@@ -67,7 +69,7 @@ Requires **Python 3.12**: the version in `.python-version` (PyCharm, VS Code, py
 pip install -r requirements.txt
 cp .env.example .env                 # only for -m auth: a real account (other tests make up accounts with Faker)
 playwright install chromium
-pytest                               # 31 UI + 30 API tests; manual/data_creating/auth excluded
+pytest                               # 33 UI + 31 API tests; manual/data_creating/auth excluded
 pytest tests/api                     # the API tests only (no browser, about 5 s)
 pytest tests/ui                      # the UI tests only
 pytest -m smoke
@@ -85,7 +87,7 @@ Locators are plain XPath strings that describe the element (`"//*[@id='cart']"`,
 
 ## How a test reads
 
-Every test: a docstring, `# Test data`, then `# Execution steps` made only of `with step("..."):` blocks. Steps are numbered automatically and show up in the Allure report, in the Playwright trace and in the error message of a failure (`failed in Step 3: ...`). Page methods are grouped under `####` banners with `# Scope: <area of the page>`, each with a docstring; locators stay at the bottom. Framework tests enforce both.
+Every test: a docstring, `# Test data`, then `# Execution steps` made only of `with step(step_number, "..."):` blocks: `step_number = 1` before the first step, `step_number += 1` before each next one (the `step` fixture stops the test if a number is skipped or repeated). Steps show up in the Allure report, in the Playwright trace and in the error message of a failure (`failed in Step 3: ...`). Page methods are grouped under `####` banners with `# Scope: <area of the page>`, each with a docstring; locators stay at the bottom. Framework tests enforce both.
 
 ```python
 @pytest.mark.smoke
@@ -96,11 +98,14 @@ def test_add_an_in_stock_product_to_the_cart(shop, products, step):
     grey_jacket = products["Grey jacket"]
 
     # Execution steps
-    with step("Open the product page of Grey jacket"):
+    step_number = 1
+    with step(step_number, "Open the product page of Grey jacket"):
         shop.product.open_product_page(grey_jacket["path-name"])
-    with step("Add 1 item to the cart"):
+    step_number += 1
+    with step(step_number, "Add 1 item to the cart"):
         shop.product.add_to_cart(1)
-    with step(f"Verify the cart has 1 item, total {grey_jacket['price']}"):
+    step_number += 1
+    with step(step_number, f"Verify the cart has 1 item, total {grey_jacket['price']}"):
         shop.cart.open_page()
         verify_cart_contents(shop.cart, 1, grey_jacket["price"])
 ```

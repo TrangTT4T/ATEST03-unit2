@@ -160,7 +160,7 @@ class BasePage:
 
     ############################################################################
     # Header methods
-    # Scope: Every page > Header (cart link, search box)
+    # Scope: Every page > Header (cart link, search box, account links)
     ############################################################################
     @property
     def header_cart_link(self) -> Locator:
@@ -172,6 +172,22 @@ class BasePage:
         self.type_text(self._search_box, keyword)
         self.find_element(self._search_box).press("Enter")
         self.wait_until_url_contains("/search")
+
+    def is_customer_logged_in(self) -> bool:
+        """True when a customer is logged in: the header no longer offers "Log In"."""
+        return not self.is_element_visible(self._login_link)
+
+    def open_login_page_from_header(self):
+        """Click the header's "Log In" link and wait for the login page."""
+        self.click_and_wait_for_new_page(self._login_link)
+
+    def open_register_page_from_header(self):
+        """Click the header's "Sign up" link and wait for the registration page."""
+        self.click_and_wait_for_new_page(self._register_link)
+
+    def logout(self):
+        """Log the customer out: open /account/logout (where the header's Log Out link goes)."""
+        self.open_page(self._logout_path)
 
     @contextlib.contextmanager
     def _report_timeout(self, action: str, target: str) -> Iterator[None]:
@@ -191,3 +207,7 @@ class BasePage:
     # Header (on every page). Desktop and mobile cart links both say "My Cart (N)"; the first is the desktop one.
     _header_cart_link = "//a[contains(normalize-space(),'My Cart')]"
     _search_box = "//input[@name='q']"
+    # Header account links: desktop "Log In" / "Sign up" come first, the hidden mobile ones after
+    _login_link = "//a[contains(@href,'/account/login')]"
+    _register_link = "//a[contains(@href,'/account/register')]"
+    _logout_path = "/account/logout"

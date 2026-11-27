@@ -15,9 +15,11 @@ SEARCH = Helper.read_test_data("search")
 def test_search_api_suggests_matching_products(shop_api, step, case):
     """A keyword suggests the products it names (dataset/search.json "matching")."""
     # Execution steps
-    with step(f"GET /search/suggest.json?q={case['keyword']}"):
+    step_number = 1
+    with step(step_number, f"GET /search/suggest.json?q={case['keyword']}"):
         titles = shop_api.search.search_product_titles(case["keyword"])
-    with step(f"Verify {', '.join(case['expected'])} are suggested"):
+    step_number += 1
+    with step(step_number, f"Verify {', '.join(case['expected'])} are suggested"):
         assert set(case["expected"]) <= set(titles), titles
 
 
@@ -26,7 +28,9 @@ def test_search_api_suggests_matching_products(shop_api, step, case):
 def test_search_api_suggests_nothing_for_an_unknown_keyword(shop_api, step, case):
     """A keyword that matches nothing suggests no product (dataset/search.json "no_match")."""
     # Execution steps
-    with step(f"GET /search/suggest.json?q={case['keyword']}"):
+    step_number = 1
+    with step(step_number, f"GET /search/suggest.json?q={case['keyword']}"):
         titles = shop_api.search.search_product_titles(case["keyword"])
-    with step("Verify no product is suggested"):
+    step_number += 1
+    with step(step_number, "Verify no product is suggested"):
         assert titles == []

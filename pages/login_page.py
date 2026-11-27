@@ -30,6 +30,12 @@ class LoginPage(BasePage):
         """Click "Forgot your password?" to show the password-reset form."""
         self.click_element(self._forgot_password_link)
 
+    def request_password_reset(self, email: str):
+        """Open "Forgot your password?", type ``email`` and submit; wait for the next page."""
+        self.click_forgot_password()
+        self.type_text(self._reset_email, email)
+        self.click_and_wait_for_new_page(self._reset_submit_button)
+
     @property
     def password_reset_form(self) -> Locator:
         """The password-reset form."""
@@ -44,3 +50,5 @@ class LoginPage(BasePage):
     # Password reset
     _forgot_password_link = "//a[normalize-space()='Forgot your password?']"
     _reset_form = "//form[contains(@action,'/account/recover')]"
+    _reset_email = "//form[contains(@action,'/account/recover')]//input[@name='email']"
+    _reset_submit_button = "//form[contains(@action,'/account/recover')]//*[@type='submit']"

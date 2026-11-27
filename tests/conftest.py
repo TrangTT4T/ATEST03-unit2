@@ -8,8 +8,10 @@ API testing, xdist.
 Fixture map (shared here; tests/ui/conftest.py and tests/api/conftest.py add their own):
   products           test data from dataset/products.json (cart.json, search.json are read by the tests)
   accounts           made-up accounts (Faker), new for every test
+  real_account       the real customer login from .env (only for -m auth; skips when it is not set)
   step               numbered test steps: Allure step + trace group (helper_utility/steps.py)
 """
+import os
 import shutil
 from pathlib import Path
 
@@ -56,6 +58,18 @@ def accounts() -> dict:
         "unknown-user": Helper.random_unregistered_login(),
         "malformed-email": {"email": Helper.random_malformed_email(), "password": customer["password"]},
     }
+
+
+@pytest.fixture(scope="session")
+def real_account() -> dict:
+    """The real customer login (email, password) from .env: SAUCE_EMAIL / SAUCE_PASSWORD, for -m auth.
+
+    Skips the test when they are not set. The password is never logged (type_text(secret=True)).
+    """
+    email, password = os.getenv("SAUCE_EMAIL"), os.getenv("SAUCE_PASSWORD")
+    if not (email and password):
+        pytest.skip("Set SAUCE_EMAIL and SAUCE_PASSWORD in .env to run the @auth tests")
+    return {"email": email, "password": password}
 
 
 # --- test steps ---------------------------------------------------------------

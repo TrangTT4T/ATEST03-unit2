@@ -23,10 +23,12 @@ def test_cart_api_adds_the_product_and_totals_the_price(shop_api, products, step
     total_in_pence = Helper.money_to_pence(case["total"])
 
     # Execution steps
-    with step(f"POST /cart/add.js: {case['quantity']} x {case['product']}"):
+    step_number = 1
+    with step(step_number, f"POST /cart/add.js: {case['quantity']} x {case['product']}"):
         response = shop_api.cart.add_product_to_cart(product["path-name"], case["quantity"])
         assert response.status == 200, response.text()
-    with step(f"Verify /cart.js: {case['quantity']} items, total {total_in_pence} pence, one line"):
+    step_number += 1
+    with step(step_number, f"Verify /cart.js: {case['quantity']} items, total {total_in_pence} pence, one line"):
         cart = shop_api.cart.get_cart()
         assert cart["item_count"] == case["quantity"]
         assert cart["total_price"] == total_in_pence
@@ -43,12 +45,15 @@ def test_cart_api_changes_the_quantity_of_a_line(shop_api, products, step, case)
     total_in_pence = Helper.money_to_pence(case["total"])
 
     # Execution steps
-    with step(f"POST /cart/add.js: {case['from']} x {case['product']}"):
+    step_number = 1
+    with step(step_number, f"POST /cart/add.js: {case['from']} x {case['product']}"):
         shop_api.cart.add_product_to_cart(product["path-name"], case["from"])
-    with step(f"POST /cart/change.js: line 1 -> quantity {case['to']}"):
+    step_number += 1
+    with step(step_number, f"POST /cart/change.js: line 1 -> quantity {case['to']}"):
         response = shop_api.cart.change_cart_line_quantity(1, case["to"])
         assert response.status == 200, response.text()
-    with step(f"Verify /cart.js: {case['to']} items, total {total_in_pence} pence"):
+    step_number += 1
+    with step(step_number, f"Verify /cart.js: {case['to']} items, total {total_in_pence} pence"):
         cart = shop_api.cart.get_cart()
         assert cart["item_count"] == case["to"]
         assert cart["total_price"] == total_in_pence
@@ -63,12 +68,15 @@ def test_cart_api_removes_a_line_set_to_zero(shop_api, products, step, case):
     product = products[case["product"]]
 
     # Execution steps
-    with step(f"POST /cart/add.js: 1 x {case['product']}"):
+    step_number = 1
+    with step(step_number, f"POST /cart/add.js: 1 x {case['product']}"):
         shop_api.cart.add_product_to_cart(product["path-name"], 1)
-    with step("POST /cart/change.js: line 1 -> quantity 0"):
+    step_number += 1
+    with step(step_number, "POST /cart/change.js: line 1 -> quantity 0"):
         response = shop_api.cart.change_cart_line_quantity(1, 0)
         assert response.status == 200, response.text()
-    with step("Verify /cart.js: no items left"):
+    step_number += 1
+    with step(step_number, "Verify /cart.js: no items left"):
         assert shop_api.cart.get_cart()["item_count"] == 0
 
 
@@ -83,8 +91,10 @@ def test_cart_api_refuses_a_sold_out_product(shop_api, products, step):
     brown_shades = products["Brown Shades"]  # status "sold out"
 
     # Execution steps
-    with step("POST /cart/add.js: 1 x Brown Shades (sold out)"):
+    step_number = 1
+    with step(step_number, "POST /cart/add.js: 1 x Brown Shades (sold out)"):
         response = shop_api.cart.add_product_to_cart(brown_shades["path-name"], 1)
-    with step("Verify the add is refused and the cart stays empty"):
+    step_number += 1
+    with step(step_number, "Verify the add is refused and the cart stays empty"):
         assert response.status >= 400, f"sold-out product accepted: HTTP {response.status}"
         assert shop_api.cart.get_cart()["item_count"] == 0

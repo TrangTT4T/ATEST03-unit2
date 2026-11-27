@@ -20,13 +20,16 @@ def test_catalog_shows_correct_price_and_stock_status(shop, products, step, name
     sold_out = product["status"] == "sold out"
 
     # Execution steps
-    with step("Open the catalog"):
+    step_number = 1
+    with step(step_number, "Open the catalog"):
         shop.catalog.open_page()
-    with step(f"Verify the tile of {name} shows its name and price {product['price']}"):
+    step_number += 1
+    with step(step_number, f"Verify the tile of {name} shows its name and price {product['price']}"):
         tile = shop.catalog.product_tile(product["path-name"])
         expect(tile).to_contain_text(name)
         expect(tile).to_contain_text(product["price"])
-    with step(f"Verify the tile {'shows' if sold_out else 'does not show'} 'Sold Out'"):
+    step_number += 1
+    with step(step_number, f"Verify the tile {'shows' if sold_out else 'does not show'} 'Sold Out'"):
         if sold_out:
             expect(tile).to_contain_text("Sold Out", ignore_case=True)
         else:
@@ -40,9 +43,11 @@ def test_product_page_shows_the_catalog_name_and_price(shop, products, step):
     noir_jacket = products["Noir jacket"]
 
     # Execution steps
-    with step("Open the product page of Noir jacket"):
+    step_number = 1
+    with step(step_number, "Open the product page of Noir jacket"):
         shop.product.open_product_page(noir_jacket["path-name"])
-    with step(f"Verify the name is Noir jacket and the price {noir_jacket['price']}"):
+    step_number += 1
+    with step(step_number, f"Verify the name is Noir jacket and the price {noir_jacket['price']}"):
         expect(shop.product.product_name).to_have_text("Noir jacket")
         expect(shop.product.product_price).to_contain_text(noir_jacket["price"])
 
@@ -55,8 +60,10 @@ def test_a_sold_out_product_cannot_be_added_to_the_cart(shop, products, step):
     brown_shades = products["Brown Shades"]
 
     # Execution steps
-    with step("Open the product page of Brown Shades (sold out)"):
+    step_number = 1
+    with step(step_number, "Open the product page of Brown Shades (sold out)"):
         shop.product.open_product_page(brown_shades["path-name"])
-    with step("Verify the 'Sold Out' button is shown and disabled"):
+    step_number += 1
+    with step(step_number, "Verify the 'Sold Out' button is shown and disabled"):
         expect(shop.product.sold_out_button).to_be_visible()
         expect(shop.product.sold_out_button).to_be_disabled()

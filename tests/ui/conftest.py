@@ -8,7 +8,6 @@ Fixture map (Day 5-6):
   shop_api_in_browser         API objects bound to the page: share its cookies, watch or change its traffic
   saved_login_state  login once, reuse the saved storage state (auth)
 """
-import os
 from pathlib import Path
 from types import SimpleNamespace
 from urllib.parse import urlparse
@@ -16,7 +15,7 @@ from urllib.parse import urlparse
 import pytest
 from playwright.sync_api import Browser, Page
 
-from api import CartApi, NetworkApi, ProductApi, SearchApi
+from api import AccountApi, CartApi, NetworkApi, ProductApi, SearchApi
 from pages import BasePage, CartPage, CatalogPage, CheckoutPage, LoginPage, ProductPage, RegisterPage, SearchPage
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -72,21 +71,19 @@ def shop_api_in_browser(page: Page) -> SimpleNamespace:
     page shows) and can watch or change the page's traffic (.cart add-to-cart requests, .network)."""
     request = page.context.request
     return SimpleNamespace(product=ProductApi(request, page), cart=CartApi(request, page),
-                           search=SearchApi(request, page), network=NetworkApi(request, page))
+                           search=SearchApi(request, page), network=NetworkApi(request, page),
+                           account=AccountApi(request, page))
 
 
 # --- authentication state (Day 6) ------------------------------------------------
 @pytest.fixture(scope="session")
-def saved_login_state(browser: Browser, base_url: str) -> Path:
+def saved_login_state(browser: Browser, base_url: str, real_account: dict) -> Path:
     """Log in once per session and save cookies/localStorage; tests reuse the file."""
-    email, password = os.getenv("SAUCE_EMAIL"), os.getenv("SAUCE_PASSWORD")
-    if not (email and password):
-        pytest.skip("Set SAUCE_EMAIL and SAUCE_PASSWORD to run @auth tests")
     context = browser.new_context(base_url=base_url)
     page = context.new_page()
     login = LoginPage(page)
     login.open_page()
-    login.login(email, password)
+    login.login(real_account["email"], real_account["password"])
     page.wait_for_url("**/account**")
     AUTH_FILE.parent.mkdir(exist_ok=True)
     context.storage_state(path=str(AUTH_FILE))

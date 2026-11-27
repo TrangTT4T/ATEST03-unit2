@@ -30,11 +30,14 @@ def test_add_an_in_stock_product_to_the_cart(shop, products, step):
     grey_jacket = products["Grey jacket"]
 
     # Execution steps
-    with step("Open the product page of Grey jacket"):
+    step_number = 1
+    with step(step_number, "Open the product page of Grey jacket"):
         shop.product.open_product_page(grey_jacket["path-name"])
-    with step("Add 1 item to the cart"):
+    step_number += 1
+    with step(step_number, "Add 1 item to the cart"):
         shop.product.add_to_cart(1)
-    with step(f"Verify the cart has 1 item, total {grey_jacket['price']}"):
+    step_number += 1
+    with step(step_number, f"Verify the cart has 1 item, total {grey_jacket['price']}"):
         shop.cart.open_page()
         verify_cart_contents(shop.cart, 1, grey_jacket["price"])
 
@@ -45,9 +48,11 @@ def test_add_an_in_stock_product_to_the_cart(shop, products, step):
 def test_cart_total_equals_price_times_quantity(add_product_and_open_cart, step, case):
     """The cart total of N items of one product is N times its price (dataset/cart.json "add")."""
     # Execution steps
-    with step(f"Put {case['quantity']} x {case['product']} in the cart"):
+    step_number = 1
+    with step(step_number, f"Put {case['quantity']} x {case['product']} in the cart"):
         cart = add_product_and_open_cart(case["product"], case["quantity"])
-    with step(f"Verify the cart has {case['quantity']} items, total {case['total']}"):
+    step_number += 1
+    with step(step_number, f"Verify the cart has {case['quantity']} items, total {case['total']}"):
         verify_cart_contents(cart, case["quantity"], case["total"])
 
 
@@ -57,11 +62,14 @@ def test_cart_total_equals_price_times_quantity(add_product_and_open_cart, step,
 def test_change_the_quantity_of_a_product_in_the_cart(add_product_and_open_cart, step, case):
     """Changing a line's quantity updates the item count and the total (dataset/cart.json "change")."""
     # Execution steps
-    with step(f"Put {case['from']} x {case['product']} in the cart"):
+    step_number = 1
+    with step(step_number, f"Put {case['from']} x {case['product']} in the cart"):
         cart = add_product_and_open_cart(case["product"], case["from"])
-    with step(f"Change the quantity of {case['product']} to {case['to']}"):
+    step_number += 1
+    with step(step_number, f"Change the quantity of {case['product']} to {case['to']}"):
         cart.change_product_quantity(case["product"], case["to"])
-    with step(f"Verify the cart has {case['to']} items, total {case['total']}"):
+    step_number += 1
+    with step(step_number, f"Verify the cart has {case['to']} items, total {case['total']}"):
         verify_cart_contents(cart, case["to"], case["total"])
 
 
@@ -71,11 +79,14 @@ def test_change_the_quantity_of_a_product_in_the_cart(add_product_and_open_cart,
 def test_remove_the_only_product_from_the_cart(add_product_and_open_cart, step, case):
     """Removing the only line leaves an empty cart (dataset/cart.json "remove")."""
     # Execution steps
-    with step(f"Put 1 x {case['product']} in the cart"):
+    step_number = 1
+    with step(step_number, f"Put 1 x {case['product']} in the cart"):
         cart = add_product_and_open_cart(case["product"], 1)
-    with step(f"Remove {case['product']} from the cart"):
+    step_number += 1
+    with step(step_number, f"Remove {case['product']} from the cart"):
         cart.remove_product_from_cart(case["product"])
-    with step("Verify the cart has no lines left"):
+    step_number += 1
+    with step(step_number, "Verify the cart has no lines left"):
         expect(cart.quantity_boxes).to_have_count(0)
 
 
@@ -87,12 +98,15 @@ def test_cart_prepared_through_the_api_shows_in_the_browser(shop, shop_api_in_br
     grey_jacket = products["Grey jacket"]
 
     # Execution steps
-    with step("Open the store (the API calls share this browser's cookies)"):
+    step_number = 1
+    with step(step_number, "Open the store (the API calls share this browser's cookies)"):
         shop.home.open_page()
-    with step("POST /cart/add.js: 1 x Grey jacket, without touching the product page"):
+    step_number += 1
+    with step(step_number, "POST /cart/add.js: 1 x Grey jacket, without touching the product page"):
         response = shop_api_in_browser.cart.add_product_to_cart(grey_jacket["path-name"], 1)
         assert response.status == 200, response.text()
-    with step("Open the cart page and verify it shows 1 item"):
+    step_number += 1
+    with step(step_number, "Open the cart page and verify it shows 1 item"):
         shop.cart.open_page()
         expect(shop.cart.quantity_boxes).to_have_count(1)
         assert shop.cart.count_items_in_cart() == 1

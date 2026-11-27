@@ -16,11 +16,14 @@ SEARCH = Helper.read_test_data("search")
 def test_search_returns_matching_products(shop, step, case):
     """A keyword lists the products it names (dataset/search.json "matching")."""
     # Execution steps
-    with step("Open the home page"):
+    step_number = 1
+    with step(step_number, "Open the home page"):
         shop.home.open_page()
-    with step(f"Search for {case['keyword']!r}"):
+    step_number += 1
+    with step(step_number, f"Search for {case['keyword']!r}"):
         shop.home.search_for(case["keyword"])
-    with step(f"Verify the results include {', '.join(case['expected'])}"):
+    step_number += 1
+    with step(step_number, f"Verify the results include {', '.join(case['expected'])}"):
         for name in case["expected"]:
             expect(shop.search.search_result_links.filter(has_text=name).first).to_be_visible()
 
@@ -30,10 +33,13 @@ def test_search_returns_matching_products(shop, step, case):
 def test_search_with_no_matching_products(shop, step, case):
     """A keyword that matches nothing shows 'No results found' and no products (dataset/search.json "no_match")."""
     # Execution steps
-    with step("Open the home page"):
+    step_number = 1
+    with step(step_number, "Open the home page"):
         shop.home.open_page()
-    with step(f"Search for {case['keyword']!r}"):
+    step_number += 1
+    with step(step_number, f"Search for {case['keyword']!r}"):
         shop.home.search_for(case["keyword"])
-    with step("Verify 'No results found' is shown and no product is listed"):
+    step_number += 1
+    with step(step_number, "Verify 'No results found' is shown and no product is listed"):
         expect(shop.search.no_results_message).to_be_visible()
         expect(shop.search.search_result_links).to_have_count(0)

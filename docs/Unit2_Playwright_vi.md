@@ -23,7 +23,7 @@ ATEST03-unit2/
 │   ├── cart.json                #   các ca thêm / đổi số lượng / xoá, kèm tổng tiền mong đợi
 │   └── search.json              #   từ khoá có kết quả (chữ hoa, một phần của từ ...) và từ khoá không có kết quả
 ├── .env.example                 # chỉ SAUCE_EMAIL / SAUCE_PASSWORD (pytest -m auth); git bỏ qua .env nên không bao giờ bị push
-├── api/                         # API object, mỗi khu vực một class như pages/: BaseApi, ProductApi, CartApi, SearchApi
+├── api/                         # API object, mỗi khu vực một class như pages/: BaseApi, ProductApi, CartApi, SearchApi, AccountApi
 ├── pages/                       # Page Object Playwright (chuyển từ Unit 1): mỗi file một class
 └── tests/
     ├── conftest.py              # dùng chung: products, accounts (Faker), step, báo cáo
@@ -194,11 +194,14 @@ def test_add_an_in_stock_product_to_the_cart(shop, products, step):
     grey_jacket = products["Grey jacket"]
 
     # Execution steps
-    with step("Open the product page of Grey jacket"):
+    step_number = 1
+    with step(step_number, "Open the product page of Grey jacket"):
         shop.product.open_product_page(grey_jacket["path-name"])
-    with step("Add 1 item to the cart"):
+    step_number += 1
+    with step(step_number, "Add 1 item to the cart"):
         shop.product.add_to_cart(1)           # chờ response AJAX của /cart/add
-    with step("Verify the cart has 1 item, total £55.00"):
+    step_number += 1
+    with step(step_number, "Verify the cart has 1 item, total £55.00"):
         shop.cart.open_page()
         verify_cart_contents(shop.cart, 1, "£55.00")   # expect(header_cart_link) "My Cart (1)" + total
 ```
@@ -211,7 +214,7 @@ def test_add_an_in_stock_product_to_the_cart(shop, products, step):
 
 #### Cấu trúc một test: dữ liệu test, rồi các bước được đánh số
 
-Test nào cũng đọc theo cùng một khung: docstring nói test chứng minh điều gì, `# Test data` (chỉ gán biến), rồi `# Execution steps` — chỉ gồm các khối `with step("..."):`. Fixture `step` (`helper_utility/steps.py`) tự đánh số bước (không cần biến đếm `step_index` tự cộng tay) và biến mỗi khối thành:
+Test nào cũng đọc theo cùng một khung: docstring nói test chứng minh điều gì, `# Test data` (chỉ gán biến), rồi `# Execution steps` — chỉ gồm các khối `with step(step_number, "..."):`. Test tự đếm bước giống mẫu ở công ty `with allure.step(f"Step {step_index}: ...")`: `step_number = 1` trước bước đầu, `step_number += 1` trước mỗi bước sau. Fixture `step` (`helper_utility/steps.py`) kiểm tra biến đếm — nhảy số hoặc quên `+= 1` (hai bước "Step 2") thì test dừng với `ValueError` rõ ràng — và biến mỗi khối thành:
 
 | Ở đâu | Thấy gì |
 | --- | --- |
@@ -247,7 +250,7 @@ Hai quy tắc này nằm trong checklist review (Day 8, B4).
 cd ATEST03-unit2
 pip install -r requirements.txt
 playwright install chromium
-pytest --collect-only -q          # 37 test giao diện (31 chạy mặc định) + 30 test API
+pytest --collect-only -q          # 41 test giao diện (33 chạy mặc định) + 36 test API (31 chạy mặc định)
 pytest -m smoke                   # cùng tag smoke như Unit 1
 pytest --headed --slowmo 300      # xem trình duyệt chạy
 ```
@@ -344,12 +347,13 @@ Các trang của store gọi một API JSON (Shopify AJAX API). Test thẳng API
 | `ProductApi` | `request_product(path_name)` | `GET /products/<path-name>.js` |
 | `CartApi` | `add_product_to_cart(path_name, quantity)`, `get_cart()`, `change_cart_line_quantity(line, quantity)` | `POST /cart/add.js`, `GET /cart.js`, `POST /cart/change.js` |
 | `SearchApi` | `search_product_titles(keyword)` | `GET /search/suggest.json` |
+| `AccountApi` | `is_logged_in()`, `get_account_redirect()`, `login(email, password)`, `logout()`, `register_account(...)`, `request_password_reset(email)` — gửi các form tài khoản của store mà không cần trình duyệt; nếu bị chuyển sang trang kiểm tra bot (`/challenge`) thì dừng với thông báo rõ ràng, không bao giờ vượt qua | `GET /account`, `POST /account/login`, `GET /account/logout`, `POST /account`, `POST /account/recover` |
 | `CartApi` (traffic của page) | `capture_add_to_cart_request()`, `request_carries_product_id(request)`, `answer_add_to_cart_with_error(status)`, `stop_answering_add_to_cart()` | `POST /cart/add` của page |
 | `NetworkApi` | `block_third_party_hosts(store_host)`, `can_page_reach(url)`, `throttle_network(...)` | traffic của page (route, fetch, Chromium DevTools) |
 
 | Fixture | Ở đâu | Request context | Dùng cho |
 | --- | --- | --- | --- |
-| `shop_api` | `tests/api/conftest.py` | riêng (`playwright.request.new_context`): không trình duyệt, giỏ riêng | test API: `shop_api.product`, `shop_api.cart`, `shop_api.search` (giống `shop` cho page) |
+| `shop_api` | `tests/api/conftest.py` | riêng (`playwright.request.new_context`): không trình duyệt, giỏ riêng | test API: `shop_api.product`, `.cart`, `.search`, `.account` (giống `shop` cho page) |
 | `shop_api_in_browser` | `tests/ui/conftest.py` | của page (`page.context.request`) + page: dùng chung cookie với trình duyệt | test giao diện: chuẩn bị dữ liệu bằng API, traffic `.cart`, `.network` |
 
 | Test | Kiểm tra | Yêu cầu |
@@ -358,6 +362,8 @@ Các trang của store gọi một API JSON (Shopify AJAX API). Test thẳng API
 | `test_cart_api.py`: `…_adds_the_product_and_totals_the_price` (×4), `…_changes_the_quantity_of_a_line` (×2), `…_removes_a_line_set_to_zero` | các ca trong `dataset/cart.json`: số món và tổng tiền (pence) | REQ-01, REQ-02 |
 | `test_cart_api.py`: `test_cart_api_refuses_a_sold_out_product` | **xfail, phát hiện A1** | REQ-04 |
 | `test_search_api.py`: `…_suggests_matching_products`, `…_suggests_nothing_for_an_unknown_keyword` | các ca trong `dataset/search.json`: gợi ý mong đợi / không có gì | REQ-08 |
+| `test_account_api.py`: `test_account_page_sends_a_guest_to_the_login_page` | `/account` chuyển khách chưa đăng nhập về `/account/login` | REQ-05 |
+| `test_account_api.py`: `test_login_api_rejects_invalid_credentials` (×2, manual), `test_login_api_logs_the_customer_in_and_out` (auth), `test_register_api_rejects_a_missing_email` (manual), `test_register_api_creates_an_account_and_logs_it_in` (data_creating) | đăng nhập bị từ chối / thành công, đăng xuất, đăng ký — mặc định bị lọc giống bản giao diện (CAPTCHA, tài khoản thật, dữ liệu thật) | REQ-05, REQ-07 |
 | `tests/ui/test_cart.py`: `test_cart_prepared_through_the_api_shows_in_the_browser` | API để chuẩn bị, trình duyệt để kiểm tra | REQ-01 |
 
 **Phát hiện A1:** Brown Shades đang hết hàng (`"available": false`, trang sản phẩm hiện nút "Sold Out" bị khoá), nhưng `POST /cart/add.js` vẫn thêm được (HTTP 200, giỏ có 1 món). Test giao diện pass; chỉ test API thấy lỗi này. Test ghi hành vi đúng (phải bị từ chối) và được đánh dấu `xfail(strict=True)` kèm mô tả: báo cáo liệt kê nó là lỗi đã biết, và khi store sửa xong thì test pass, `strict` làm lần chạy fail để nhắc bỏ marker.
@@ -475,8 +481,8 @@ pytest -m "critical and not negative"
 
 | Kiểm tra | Kết quả |
 | --- | --- |
-| `pytest` | 60 pass (31 giao diện + 29 API), 1 xfailed (API, phát hiện A1), 6 bị lọc (`auth` ×2, `manual` ×3, `data_creating` ×1) |
-| `pytest -n auto` | 60 pass, 1 xfailed |
+| `pytest` | 63 pass (33 giao diện + 30 API), 1 xfailed (API, phát hiện A1), 13 bị lọc (`auth` ×4, `manual` ×7, `data_creating` ×2) |
+| `pytest -n auto` | 35 pass, 1 xfailed (chạy trên phiên bản cũ của bộ test; với store thật thường chạy tuần tự để tải nhẹ) |
 | `pytest -m auth` (có tài khoản) | 2 pass |
 | Test fail | `test-results/<test>/trace.zip`, ảnh, video |
 
@@ -595,7 +601,7 @@ Select-String -Path tests\*.py -Pattern ':nth-child|nth=|\.nth\('               
 - [ ] Yêu cầu REQ-01 … REQ-08 nào cũng có test: `pytest -m <yêu_cầu> --collect-only -q`
 - [ ] Test đọc giống yêu cầu: thao tác và kiểm tra qua page object, không URL hay CSS trong test
 - [ ] Không có locator ngoài `pages/`
-- [ ] Test nào cũng có docstring, `# Test data`, rồi chỉ các khối `with step(...)`; method page nào cũng có docstring dưới banner `# Scope:` (review)
+- [ ] Test nào cũng có docstring, `# Test data`, rồi chỉ các khối `with step(step_number, ...)`; method page nào cũng có docstring dưới banner `# Scope:` (review)
 - [ ] Không chờ cố định, không `force=True` (lệnh tìm ở B3 không ra kết quả)
 - [ ] 0 test flaky trong 3 lần chạy liên tiếp (B2)
 - [ ] Mỗi lần fail đều có trace, ảnh và video

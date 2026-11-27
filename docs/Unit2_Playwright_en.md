@@ -23,7 +23,7 @@ ATEST03-unit2/
 │   ├── cart.json                #   add / change / remove cases with their expected totals
 │   └── search.json              #   matching keywords (upper case, part of a word ...) and keywords with no match
 ├── .env.example                 # SAUCE_EMAIL / SAUCE_PASSWORD only (pytest -m auth); git ignores .env, so it is never pushed
-├── api/                         # API objects, one class per area like pages/: BaseApi, ProductApi, CartApi, SearchApi
+├── api/                         # API objects, one class per area like pages/: BaseApi, ProductApi, CartApi, SearchApi, AccountApi
 ├── pages/                       # Playwright Page Objects (ported from Unit 1): one class per file
 └── tests/
     ├── conftest.py              # shared: products, accounts (Faker), step, reports
@@ -194,11 +194,14 @@ def test_add_an_in_stock_product_to_the_cart(shop, products, step):
     grey_jacket = products["Grey jacket"]
 
     # Execution steps
-    with step("Open the product page of Grey jacket"):
+    step_number = 1
+    with step(step_number, "Open the product page of Grey jacket"):
         shop.product.open_product_page(grey_jacket["path-name"])
-    with step("Add 1 item to the cart"):
+    step_number += 1
+    with step(step_number, "Add 1 item to the cart"):
         shop.product.add_to_cart(1)           # waits for the AJAX /cart/add answer
-    with step("Verify the cart has 1 item, total £55.00"):
+    step_number += 1
+    with step(step_number, "Verify the cart has 1 item, total £55.00"):
         shop.cart.open_page()
         verify_cart_contents(shop.cart, 1, "£55.00")   # expect(header_cart_link) "My Cart (1)" + total
 ```
@@ -211,7 +214,7 @@ def test_add_an_in_stock_product_to_the_cart(shop, products, step):
 
 #### Test layout: test data, then numbered steps
 
-Every test reads the same way: a docstring saying what it proves, `# Test data` (plain assignments), then `# Execution steps` — only `with step("..."):` blocks. The `step` fixture (`helper_utility/steps.py`) numbers the steps itself (no `step_index` counter to keep in sync) and turns each block into:
+Every test reads the same way: a docstring saying what it proves, `# Test data` (plain assignments), then `# Execution steps` — only `with step(step_number, "..."):` blocks. The test counts its steps like the workplace pattern `with allure.step(f"Step {step_index}: ...")`: `step_number = 1` before the first step, `step_number += 1` before each next one. The `step` fixture (`helper_utility/steps.py`) checks the counter — a skipped number or a forgotten `+= 1` (two "Step 2") stops the test with a clear `ValueError` — and turns each block into:
 
 | Where | What you see |
 | --- | --- |
@@ -247,7 +250,7 @@ Both rules are part of the review checklist (Day 8, B4).
 cd ATEST03-unit2
 pip install -r requirements.txt
 playwright install chromium
-pytest --collect-only -q          # 37 UI tests (31 in the default run) + 30 API tests
+pytest --collect-only -q          # 41 UI tests (33 in the default run) + 36 API tests (31 in the default run)
 pytest -m smoke                   # same smoke markers as Unit 1's tags
 pytest --headed --slowmo 300      # watch it run
 ```
@@ -344,12 +347,13 @@ The store's pages call a JSON API (the Shopify AJAX API). Testing it directly is
 | `ProductApi` | `request_product(path_name)` | `GET /products/<path-name>.js` |
 | `CartApi` | `add_product_to_cart(path_name, quantity)`, `get_cart()`, `change_cart_line_quantity(line, quantity)` | `POST /cart/add.js`, `GET /cart.js`, `POST /cart/change.js` |
 | `SearchApi` | `search_product_titles(keyword)` | `GET /search/suggest.json` |
+| `AccountApi` | `is_logged_in()`, `get_account_redirect()`, `login(email, password)`, `logout()`, `register_account(...)`, `request_password_reset(email)` — the store's account forms, posted without a browser; a redirect to the bot check (`/challenge`) stops with a clear error, it is never bypassed | `GET /account`, `POST /account/login`, `GET /account/logout`, `POST /account`, `POST /account/recover` |
 | `CartApi` (page traffic) | `capture_add_to_cart_request()`, `request_carries_product_id(request)`, `answer_add_to_cart_with_error(status)`, `stop_answering_add_to_cart()` | the page's `POST /cart/add` |
 | `NetworkApi` | `block_third_party_hosts(store_host)`, `can_page_reach(url)`, `throttle_network(...)` | the page's traffic (route, fetch, Chromium DevTools) |
 
 | Fixture | Where | Request context | Used for |
 | --- | --- | --- | --- |
-| `shop_api` | `tests/api/conftest.py` | its own (`playwright.request.new_context`): no browser, its own cart | API tests: `shop_api.product`, `shop_api.cart`, `shop_api.search` (like `shop` for pages) |
+| `shop_api` | `tests/api/conftest.py` | its own (`playwright.request.new_context`): no browser, its own cart | API tests: `shop_api.product`, `.cart`, `.search`, `.account` (like `shop` for pages) |
 | `shop_api_in_browser` | `tests/ui/conftest.py` | the page's (`page.context.request`) + the page: shares the browser's cookies | UI tests: API set-up, `.cart` page traffic, `.network` |
 
 | Test | Checks | Requirement |
@@ -358,6 +362,8 @@ The store's pages call a JSON API (the Shopify AJAX API). Testing it directly is
 | `test_cart_api.py`: `…_adds_the_product_and_totals_the_price` (×4), `…_changes_the_quantity_of_a_line` (×2), `…_removes_a_line_set_to_zero` | the cases of `dataset/cart.json`: item count and total in pence | REQ-01, REQ-02 |
 | `test_cart_api.py`: `test_cart_api_refuses_a_sold_out_product` | **xfail, finding A1** | REQ-04 |
 | `test_search_api.py`: `…_suggests_matching_products`, `…_suggests_nothing_for_an_unknown_keyword` | the cases of `dataset/search.json`: expected suggestions / none | REQ-08 |
+| `test_account_api.py`: `test_account_page_sends_a_guest_to_the_login_page` | `/account` redirects a guest to `/account/login` | REQ-05 |
+| `test_account_api.py`: `test_login_api_rejects_invalid_credentials` (×2, manual), `test_login_api_logs_the_customer_in_and_out` (auth), `test_register_api_rejects_a_missing_email` (manual), `test_register_api_creates_an_account_and_logs_it_in` (data_creating) | login refused / accepted, logout, registration — excluded by default like their UI twins (CAPTCHA, real account, real data) | REQ-05, REQ-07 |
 | `tests/ui/test_cart.py`: `test_cart_prepared_through_the_api_shows_in_the_browser` | API for the set-up, browser for the check | REQ-01 |
 
 **Finding A1:** Brown Shades is sold out (`"available": false`, the product page shows a disabled "Sold Out" button), but `POST /cart/add.js` still adds it (HTTP 200, the cart holds 1 item). The UI test passes; only the API test sees it. The test states the expected behaviour (the add is refused) and is marked `xfail(strict=True)` with the finding: the report lists it as a known defect, and when the store is fixed the test passes and `strict` makes the run fail, so the marker is removed.
@@ -475,8 +481,8 @@ pytest -m "critical and not negative"
 
 | Check | Result |
 | --- | --- |
-| `pytest` | 60 passed (31 UI + 29 API), 1 xfailed (API, finding A1), 6 deselected (`auth` ×2, `manual` ×3, `data_creating` ×1) |
-| `pytest -n auto` | 60 passed, 1 xfailed |
+| `pytest` | 63 passed (33 UI + 30 API), 1 xfailed (API, finding A1), 13 deselected (`auth` ×4, `manual` ×7, `data_creating` ×2) |
+| `pytest -n auto` | 35 passed, 1 xfailed (run on an earlier version of the suite; the live store is normally run serially to keep its load light) |
 | `pytest -m auth` (with an account) | 2 passed |
 | Failed test | `test-results/<test>/trace.zip`, screenshot, video |
 
@@ -595,7 +601,7 @@ Select-String -Path tests\*.py -Pattern ':nth-child|nth=|\.nth\('               
 - [ ] Every requirement REQ-01 … REQ-08 has a test: `pytest -m <requirement> --collect-only -q`
 - [ ] Tests read like the requirement: actions and checks through page objects, no URL or CSS in tests
 - [ ] No locator outside `pages/`
-- [ ] Every test has a docstring, `# Test data`, then only `with step(...)` blocks; every page method has a docstring under a `# Scope:` banner (review)
+- [ ] Every test has a docstring, `# Test data`, then only `with step(step_number, ...)` blocks; every page method has a docstring under a `# Scope:` banner (review)
 - [ ] No fixed waits, no `force=True` (B3 searches return nothing)
 - [ ] 0 flaky tests in 3 consecutive runs (B2)
 - [ ] Every failure leaves a trace, screenshot and video

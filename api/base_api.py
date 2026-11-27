@@ -20,14 +20,15 @@ class BaseApi:
     # Request methods
     # Scope: Every API object > GET, POST
     ############################################################################
-    def get(self, endpoint: str, params: dict | None = None) -> APIResponse:
+    def get(self, endpoint: str, params: dict | None = None, follow_redirects: bool = True) -> APIResponse:
         """GET ``endpoint`` and log the status.
 
         :param endpoint: path after the base URL, e.g. "/cart.js"
         :param params: query parameters
+        :param follow_redirects: False: return the redirect itself (status 302 and its "location" header)
         :return: the response
         """
-        response = self.request.get(endpoint, params=params)
+        response = self.request.get(endpoint, params=params, max_redirects=20 if follow_redirects else 0)
         self.logger.info("GET %s %s -> HTTP %s", endpoint, params or "", response.status)
         return response
 
@@ -40,4 +41,19 @@ class BaseApi:
         """
         response = self.request.post(endpoint, data=data)
         self.logger.info("POST %s %s -> HTTP %s", endpoint, data, response.status)
+        return response
+
+    def post_form(self, endpoint: str, form: dict) -> APIResponse:
+        """POST ``form`` as an HTML form would (form-encoded) and log the status; redirects are not followed.
+
+        The log shows *** for every field whose name contains "password".
+
+        :param endpoint: path after the base URL, e.g. "/account/login"
+        :param form: the form fields, e.g. {"customer[email]": "..."}
+        :return: the response: a redirect keeps its status (302) and its "location" header
+        """
+        response = self.request.post(endpoint, form=form, max_redirects=0)
+        logged_form = {name: "***" if "password" in name else value for name, value in form.items()}
+        self.logger.info("POST %s %s -> HTTP %s %s", endpoint, logged_form, response.status,
+                         response.headers.get("location", ""))
         return response

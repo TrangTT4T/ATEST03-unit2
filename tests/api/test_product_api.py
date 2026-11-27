@@ -22,9 +22,11 @@ def test_product_api_returns_the_catalog_name_price_and_stock(shop_api, products
     in_stock = product["status"] == "available"
 
     # Execution steps
-    with step(f"GET the product JSON of {name}"):
+    step_number = 1
+    with step(step_number, f"GET the product JSON of {name}"):
         response = shop_api.product.request_product(product["path-name"])
-    with step(f"Verify HTTP 200, title {name!r}, price {price_in_pence} pence, available={in_stock}"):
+    step_number += 1
+    with step(step_number, f"Verify HTTP 200, title {name!r}, price {price_in_pence} pence, available={in_stock}"):
         assert response.status == 200, f"HTTP {response.status} for {product['path-name']}"
         data = response.json()
         assert data["title"] == name
@@ -41,14 +43,17 @@ def test_product_api_returns_the_catalog_type_vendor_and_options(shop_api, produ
     product = products[name]
 
     # Execution steps
-    with step(f"GET the product JSON of {name}"):
+    step_number = 1
+    with step(step_number, f"GET the product JSON of {name}"):
         response = shop_api.product.request_product(product["path-name"])
         assert response.status == 200, f"HTTP {response.status} for {product['path-name']}"
         data = response.json()
-    with step(f"Verify type {product['type']!r} and vendor {product['vendor']!r}"):
+    step_number += 1
+    with step(step_number, f"Verify type {product['type']!r} and vendor {product['vendor']!r}"):
         assert data["type"] == product["type"]
         assert data["vendor"] == product["vendor"]
-    with step(f"Verify the options {product['options']}"):
+    step_number += 1
+    with step(step_number, f"Verify the options {product['options']}"):
         options = {option["name"]: option["values"] for option in data["options"]}
         options.pop("Title", None)  # Shopify's placeholder {"Title": ["Default Title"]} for a product without options
         assert options == product["options"]
@@ -63,7 +68,9 @@ def test_unknown_product_returns_404(shop_api, step):
     path_name = "no-such-product"
 
     # Execution steps
-    with step(f"GET the product JSON of {path_name!r}"):
+    step_number = 1
+    with step(step_number, f"GET the product JSON of {path_name!r}"):
         response = shop_api.product.request_product(path_name)
-    with step("Verify HTTP 404"):
+    step_number += 1
+    with step(step_number, "Verify HTTP 404"):
         assert response.status == 404
