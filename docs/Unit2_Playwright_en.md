@@ -145,11 +145,12 @@ No method returns the page for chaining: call a method, then use the page, on tw
 | `browser`, `context`, `page` | session / test / test | `before_scenario` + `after_scenario` | Provided by pytest-playwright |
 | `browser_context_args` | session | `_make_driver()` options | Viewport 1366×900, locale en-US |
 | `products` | session | `before_all` loading JSON | `Helper.read_test_data("products")` |
-| `swag_accounts` | session | — | The demo accounts from `.env` (`standard-user`, `locked-out-user`); skips with a clear message when `.env` is missing |
+| `swag_accounts` | session | — | The demo accounts from `.env` by name (`standard-user`, `locked-out-user`, `problem-user` …); skips with a clear message when a needed variable is missing |
+| `shopper` | session | — | The account of the run: `--account` (default `standard-user`) |
 | `accounts` | test | — | Every login of `dataset/login.json` by name: the demo accounts + made-up ones (Faker): `unknown-user`, `wrong-password`, `missing-username`, `missing-password` |
 | `checkout_information` | test | — | A made-up customer for the checkout form (Faker) |
 | `shop` | test | `Helper.create_page_object()` | Every Page Object bound to this test's page: `shop.login`, `shop.inventory`, `shop.cart` … |
-| `logged_in_shop` | test | `Given I am logged in` step | `shop`, logged in as the standard user, on the products page |
+| `logged_in_shop` | test | `Given I am logged in` step | `shop`, logged in as the `--account` user, on the products page |
 | `fill_cart` | test | `Given ... in the cart` step | Factory: `fill_cart(["Sauce Labs Backpack", "Sauce Labs Onesie"])` |
 | `saved_login_state` | session | — | Saved login (Day 6) |
 | `step` | test | — | Numbered steps (section 5) |
@@ -254,6 +255,18 @@ class CartPage(BasePage):
 ```
 
 Both rules are part of the review checklist (Day 8, B4).
+
+### 5b. Other demo accounts (`--account`)
+
+Swag Labs has six demo accounts; four have defects on purpose. `pytest --account <name>` (an option added in `tests/conftest.py` with `pytest_addoption`) makes `logged_in_shop` and the login smoke test use that account; the header of the run names it. The same 43 tests then become a defect finder:
+
+| Account (`--account`) | Result | What the failures show |
+| --- | --- | --- |
+| `standard-user` (default) | 42 passed, 1 xfailed | — |
+| `performance-glitch-user` | 42 passed, 1 xfailed, about 3.5× slower | the login takes several seconds; auto-waiting absorbs it, no test needs a longer timeout |
+| `visual-user` | 8 failed | the products page shows wrong prices (e.g. Backpack $88.21 instead of $29.99), so price sorting is wrong too; cart and checkout totals stay right |
+| `error-user` | 15 failed | sorting does nothing; only 3 of the 6 products can be added; Remove on the products page does nothing; the product page has no description; the last name field takes no text, yet the form goes on without it; Finish does not complete the order |
+| `problem-user` | 19 failed | sorting does nothing; product names open the wrong product page (Fleece Jacket: "ITEM NOT FOUND"); only 3 products can be added, Remove on the products page does nothing; typing the last name overwrites the first name, so checkout never gets past the information form |
 
 ### 6. Isolation check
 

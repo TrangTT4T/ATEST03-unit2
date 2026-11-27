@@ -145,11 +145,12 @@ Không method nào trả về page để gọi nối tiếp: gọi method rồi 
 | `browser`, `context`, `page` | session / test / test | `before_scenario` + `after_scenario` | pytest-playwright cung cấp |
 | `browser_context_args` | session | option trong `_make_driver()` | Viewport 1366×900, locale en-US |
 | `products` | session | `before_all` đọc JSON | `Helper.read_test_data("products")` |
-| `swag_accounts` | session | — | Tài khoản demo trong `.env` (`standard-user`, `locked-out-user`); thiếu `.env` thì bỏ qua test với thông báo rõ ràng |
+| `swag_accounts` | session | — | Tài khoản demo trong `.env` theo tên (`standard-user`, `locked-out-user`, `problem-user` …); thiếu biến cần thiết thì bỏ qua test với thông báo rõ ràng |
+| `shopper` | session | — | Tài khoản của lần chạy: `--account` (mặc định `standard-user`) |
 | `accounts` | test | — | Mọi lần đăng nhập trong `dataset/login.json` theo tên: tài khoản demo + tài khoản bịa bằng Faker: `unknown-user`, `wrong-password`, `missing-username`, `missing-password` |
 | `checkout_information` | test | — | Khách hàng bịa cho form checkout (Faker) |
 | `shop` | test | `Helper.create_page_object()` | Mọi Page Object gắn với page của test: `shop.login`, `shop.inventory`, `shop.cart` … |
-| `logged_in_shop` | test | step `Given I am logged in` | `shop`, đã đăng nhập bằng standard user, đang ở trang sản phẩm |
+| `logged_in_shop` | test | step `Given I am logged in` | `shop`, đã đăng nhập bằng tài khoản `--account`, đang ở trang sản phẩm |
 | `fill_cart` | test | step `Given ... in the cart` | Factory: `fill_cart(["Sauce Labs Backpack", "Sauce Labs Onesie"])` |
 | `saved_login_state` | session | — | Lưu phiên đăng nhập (Day 6) |
 | `step` | test | — | Bước đánh số (mục 5) |
@@ -254,6 +255,18 @@ class CartPage(BasePage):
 ```
 
 Cả hai quy tắc nằm trong checklist review (Day 8, B4).
+
+### 5b. Các tài khoản demo khác (`--account`)
+
+Swag Labs có sáu tài khoản demo; bốn tài khoản cố ý có lỗi. `pytest --account <tên>` (tuỳ chọn thêm trong `tests/conftest.py` bằng `pytest_addoption`) làm `logged_in_shop` và test smoke đăng nhập dùng tài khoản đó; đầu lần chạy ghi rõ tên tài khoản. Khi đó cùng 43 test trở thành công cụ tìm lỗi:
+
+| Tài khoản (`--account`) | Kết quả | Các test fail cho thấy |
+| --- | --- | --- |
+| `standard-user` (mặc định) | 42 pass, 1 xfailed | — |
+| `performance-glitch-user` | 42 pass, 1 xfailed, chậm hơn khoảng 3,5 lần | đăng nhập mất vài giây; cơ chế tự chờ xử lý được, không test nào cần tăng timeout |
+| `visual-user` | 8 fail | trang danh sách hiện sai giá (vd. Backpack $88.21 thay vì $29.99), nên sắp theo giá cũng sai; tổng tiền ở giỏ và checkout vẫn đúng |
+| `error-user` | 15 fail | sắp xếp không có tác dụng; chỉ thêm được 3/6 sản phẩm; nút Remove ở trang danh sách không có tác dụng; trang sản phẩm không có mô tả; ô họ (last name) không nhận chữ, vậy mà form vẫn cho đi tiếp; bấm Finish không hoàn tất đơn |
+| `problem-user` | 19 fail | sắp xếp không có tác dụng; bấm tên sản phẩm mở nhầm trang (Fleece Jacket: "ITEM NOT FOUND"); chỉ thêm được 3 sản phẩm, nút Remove ở trang danh sách không có tác dụng; gõ họ (last name) thì đè lên tên (first name), nên checkout không qua được form thông tin |
 
 ### 6. Kiểm tra cô lập
 

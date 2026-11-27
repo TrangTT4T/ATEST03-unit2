@@ -73,6 +73,7 @@ pytest -m critical                   # every Critical-risk test
 pytest -m add_to_cart                # every test of one requirement
 pytest tests/test_checkout.py        # one area
 pytest -n auto                       # parallel
+pytest --account problem-user        # the same suite as another demo account (see below)
 pytest tests/test_cart.py --headed --slowmo 300
 playwright show-trace test-results/<test>/trace.zip
 ```
@@ -126,6 +127,20 @@ Every run writes:
 | Trace, screenshot, video of failed tests | `test-results/` | debugging |
 
 `--strict-markers` rejects a marker typo such as `add_to_card`.
+
+## Other demo accounts
+
+Swag Labs has six demo accounts; four of them have defects on purpose, for practice. `pytest --account <name>` runs the logged-in tests as that account (default `standard-user`; its username goes in `.env`, see `.env.example`). The login tests always use `standard-user` and `locked-out-user`. Run on 2026-11-27 with `-n 4`:
+
+| Account (`--account`) | Result | What the failures show |
+| --- | --- | --- |
+| `standard-user` (default) | 42 passed, 1 xfailed | — |
+| `performance-glitch-user` | 42 passed, 1 xfailed, about 3.5× slower | the login takes several seconds; auto-waiting absorbs it, no test needs a longer timeout |
+| `visual-user` | 8 failed | the products page shows wrong prices (e.g. Backpack $88.21 instead of $29.99), so price sorting is wrong too; cart and checkout totals stay right |
+| `error-user` | 15 failed | sorting does nothing; only 3 of the 6 products can be added; Remove on the products page does nothing; the product page has no description; the last name field takes no text, yet the form goes on without it; Finish does not complete the order |
+| `problem-user` | 19 failed | sorting does nothing; product names open the wrong product page (Fleece Jacket: "ITEM NOT FOUND"); only 3 products can be added, Remove on the products page does nothing; typing the last name overwrites the first name, so checkout never gets past the information form |
+
+Every failure names its step ("failed in Step 2: Verify the cart badge shows 6"), so the run reads as a defect list of that account.
 
 ## Known defect
 

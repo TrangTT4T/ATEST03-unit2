@@ -15,18 +15,15 @@ LOGIN = Helper.read_test_data("login")
 
 
 @pytest.mark.smoke
-def test_standard_user_logs_in_and_sees_the_products(shop, page, swag_accounts, products, step):
-    """The standard user logs in and lands on the products page with every product."""
-    # Test data
-    standard_user = swag_accounts["standard-user"]
-
+def test_customer_logs_in_and_sees_the_products(shop, page, shopper, products, step):
+    """The --account user (default standard-user) logs in and lands on the products page with every product."""
     # Execution steps
     step_number = 1
     with step(step_number, "Open the login page"):
         shop.login.open_page()
     step_number += 1
-    with step(step_number, "Log in as the standard user"):
-        shop.login.login(standard_user["username"], standard_user["password"])
+    with step(step_number, f"Log in as {shopper['username']}"):
+        shop.login.login(shopper["username"], shopper["password"])
     step_number += 1
     with step(step_number, f"Verify the products page lists the {len(products)} products"):
         expect(page).to_have_url(re.compile(r"/inventory\.html$"))
