@@ -33,7 +33,8 @@ class NetworkApi(BaseApi):
             route.abort()
 
     def is_allowed_host(self, url: str, store_host: str) -> bool:
-        """True for the store, Shopify, local and data URLs, and the hosts the theme needs."""
+        """True for the store, Shopify, local and data URLs, the hosts the theme needs and the store's
+        security check (blocking it would only turn the store's check into a "blocked network" page)."""
         if urlparse(url).scheme in ("data", "blob"):
             return True
         host = urlparse(url).hostname or ""
@@ -70,4 +71,7 @@ class NetworkApi(BaseApi):
     SHOPIFY_SUFFIXES = (".shopify.com", ".myshopify.com", ".shopifycdn.com", ".shopifycloud.com", ".shopifysvc.com")
     # Third-party hosts the THEME needs to work. The shop loads jQuery from Google's CDN; blocked, the
     # product page never renders its "Sold Out" button (found 2026-11-25). Tracking hosts stay blocked.
-    THEME_DEPENDENCIES = ("ajax.googleapis.com",)
+    # The store's security check (Cloudflare) loads its script from challenges.cloudflare.com: it is let
+    # through so the check works as in any browser - blocked, the page only says the network blocked it
+    # (found 2026-11-27). The check itself is never solved or bypassed: BasePage stops the test on it.
+    THEME_DEPENDENCIES = ("ajax.googleapis.com", "challenges.cloudflare.com")

@@ -131,6 +131,7 @@ Every test carries one requirement marker (`@pytest.mark.add_to_cart` …, decla
 
 - **Login and registration forms are MANUAL** (`@pytest.mark.manual`): the store's bot protection (CAPTCHA) stops them — no request is sent and no error is shown — so a wrong-password test could only fail. The tests are complete; run them with `pytest -m manual` in a test environment without CAPTCHA. Opening the password-reset form is automated.
 - **The theme needs jQuery from `ajax.googleapis.com`**: `block_third_party` allows that one host, otherwise the product page never renders its "Sold Out" button and Add to Cart falls back to a full-page form post. Tracking hosts stay blocked.
+- **Rate limit and bot check**: many runs in a short time from one network make the store answer Add to Cart with HTTP 429 and then show its Cloudflare check ("Just a moment..."). Add to Cart waits once as long as the store's `Retry-After` asks; a second 429, or the check page, stops the test with a message saying so. The check is never bypassed (its script from `challenges.cloudflare.com` is let through only so it works as in any browser). Wait a few minutes, then run again serially, or one folder at a time (`pytest tests/api`, then `pytest tests/ui`).
 - Never commit `.auth/`.
 
 ## ATEST03 course repositories

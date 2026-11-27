@@ -486,7 +486,7 @@ pytest -m "critical and not negative"
 | `pytest -m auth` (with an account) | 2 passed |
 | Failed test | `test-results/<test>/trace.zip`, screenshot, video |
 
-Verified on the live store (2026-11-25). Two things the live store taught the suite: the theme needs jQuery from `ajax.googleapis.com` (blocked, the "Sold Out" button never renders and Add to Cart turns into a full-page post), and its CAPTCHA stops the login and registration forms.
+Verified on the live store (2026-11-25). Two things the live store taught the suite: the theme needs jQuery from `ajax.googleapis.com` (blocked, the "Sold Out" button never renders and Add to Cart turns into a full-page post), and its CAPTCHA stops the login and registration forms. A third came on 2026-11-27: many runs from one network in a short time get HTTP 429 on Add to Cart, then the Cloudflare check ("Just a moment..."). Add to Cart waits once for the store's `Retry-After`; a second 429 or the check page stops the test with a clear message (never bypassed). Wait a few minutes and run serially, one folder at a time if needed.
 
 ### 5. Lab tasks
 

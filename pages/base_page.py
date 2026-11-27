@@ -53,11 +53,7 @@ class BasePage:
         self.logger.info("Open %s", path or self.path)
         with self._report_timeout("Opening", path or self.path):
             self.page.goto(path or self.path)  # relative: pytest-playwright gives every context the --base-url
-        title = self.page.title()
-        if any(check in title for check in self.BOT_CHECK_TITLES):  # never bypassed: report it clearly
-            self.logger.error("The store showed its bot check (%r) instead of %s", title, path or self.path)
-            raise AssertionError(f"The store asked to verify a human ({title!r}) "
-                                 f"instead of opening {path or self.path}")
+        self._verify_not_bot_check(f"opening {path or self.path}")
 
     def wait_until_url_contains(self, fragment: str):
         """Wait until the address contains ``fragment``, for example "/search"."""
@@ -172,6 +168,7 @@ class BasePage:
         self.type_text(self._search_box, keyword)
         self.find_element(self._search_box).press("Enter")
         self.wait_until_url_contains("/search")
+        self._verify_not_bot_check(f"searching for {keyword!r}")
 
     def is_customer_logged_in(self) -> bool:
         """True when a customer is logged in: the header no longer offers "Log In"."""
@@ -188,6 +185,20 @@ class BasePage:
     def logout(self):
         """Log the customer out: open /account/logout (where the header's Log Out link goes)."""
         self.open_page(self._logout_path)
+
+    def _verify_not_bot_check(self, action: str):
+        """Stop with a clear error when the store shows its bot check (Cloudflare) instead of the page.
+
+        The check is never bypassed. It usually means too many requests from this network in a short
+        time: the store asks a human to confirm, which an automated test cannot and must not do.
+
+        :param action: what the test was doing, e.g. "opening /cart"
+        """
+        title = self.page.title()
+        if any(check in title for check in self.BOT_CHECK_TITLES):
+            self.logger.error("The store showed its bot check (%r) instead of %s", title, action)
+            raise AssertionError(f"The store asked to verify a human ({title!r}) instead of {action}: too many "
+                                 f"requests from this network. Wait a few minutes, then run the suite again")
 
     @contextlib.contextmanager
     def _report_timeout(self, action: str, target: str) -> Iterator[None]:

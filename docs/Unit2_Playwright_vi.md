@@ -486,7 +486,7 @@ pytest -m "critical and not negative"
 | `pytest -m auth` (có tài khoản) | 2 pass |
 | Test fail | `test-results/<test>/trace.zip`, ảnh, video |
 
-Đã chạy trên store thật (2026-11-25). Store thật dạy bộ test hai điều: theme cần jQuery từ `ajax.googleapis.com` (bị chặn thì nút "Sold Out" không bao giờ hiện và Add to Cart thành post cả trang), và CAPTCHA của store chặn form đăng nhập và đăng ký.
+Đã chạy trên store thật (2026-11-25). Store thật dạy bộ test hai điều: theme cần jQuery từ `ajax.googleapis.com` (bị chặn thì nút "Sold Out" không bao giờ hiện và Add to Cart thành post cả trang), và CAPTCHA của store chặn form đăng nhập và đăng ký. Điều thứ ba (2026-11-27): chạy nhiều lần từ cùng một mạng trong thời gian ngắn thì Add to Cart bị HTTP 429, rồi store hiện trang kiểm tra Cloudflare ("Just a moment..."). Add to Cart chờ một lần theo `Retry-After` của store; bị 429 lần nữa hoặc gặp trang kiểm tra thì test dừng với thông báo rõ ràng (không bao giờ vượt qua). Đợi vài phút rồi chạy tuần tự, cần thì chạy từng thư mục.
 
 ### 5. Nhiệm vụ lab
 
