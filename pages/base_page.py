@@ -30,6 +30,7 @@ from playwright.sync_api import Locator, Page, Response
 from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 
 from helper_utility.helpers import Helper
+from helper_utility.store_blocked_error import StoreBlockedError
 
 
 class BasePage:
@@ -197,8 +198,8 @@ class BasePage:
         title = self.page.title()
         if any(check in title for check in self.BOT_CHECK_TITLES):
             self.logger.error("The store showed its bot check (%r) instead of %s", title, action)
-            raise AssertionError(f"The store asked to verify a human ({title!r}) instead of {action}: too many "
-                                 f"requests from this network. Wait a few minutes, then run the suite again")
+            raise StoreBlockedError(f"The store asked to verify a human ({title!r}) instead of {action}: too many "
+                                    f"requests from this network. Wait a few minutes, then run again")
 
     @contextlib.contextmanager
     def _report_timeout(self, action: str, target: str) -> Iterator[None]:

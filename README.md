@@ -14,12 +14,12 @@ Unit 2 is **plain Playwright**: tests are pytest functions that drive page objec
 | Page Object pattern, one class per file, plain XPath locators at the bottom, `Helper.by_locator`, custom BasePage methods | Same layout, locators and helper; BasePage methods on Playwright's auto-waiting |
 | Hooks in `environment.py` | Fixtures in `tests/conftest.py` |
 | Screenshot on failure | Trace + screenshot + video on failure |
-| — | Network interception, fault injection, throttling, saved auth state, parallel runs, flaky reruns |
+| — | Third-party blocking, API tests, saved auth state, parallel runs, flaky reruns |
 
 | Day | Topic | Section in the unit document | Code used |
 | --- | --- | --- | --- |
 | 5 | Architecture, contexts, locators, fixtures, assertions, isolation | Day 5 section | `pages/`, `tests/conftest.py`, `tests/ui/test_cart.py` … |
-| 6 | Tracing, network interception, auth state, parallel, reporting | Day 6 section | `pytest.ini`, `tests/ui/test_network.py`, `tests/ui/test_auth_state.py` |
+| 6 | Tracing, network control, API testing, auth state, parallel, reporting | Day 6 section | `pytest.ini`, `tests/api/`, `tests/ui/test_auth_state.py` |
 | 7 | Lab: prioritised end-to-end workflows | Day 7 section | full suite |
 | 8 | Revision + reliability, flaky control, stability | Day 8 section | repeated runs, `pytest-rerunfailures`, trace viewer |
 
@@ -34,7 +34,7 @@ ATEST03-unit2/
 ├── .env.example                 # SAUCE_EMAIL / SAUCE_PASSWORD only, for -m auth (git ignores .env: never pushed)
 ├── api/                         # API objects, one class per area like pages/: BaseApi (logged GET/POST),
 │                                #   ProductApi, CartApi, SearchApi (Shopify AJAX API), AccountApi (login, logout,
-│                                #   register, password reset forms), NetworkApi (page traffic);
+│                                #   register, password reset forms), NetworkApi (blocks third-party hosts);
 │                                #   all request handling lives here, tests only call and check
 ├── pages/                       # Page Objects: one class per file, locator strings at the bottom;
 │                                #   BasePage = find_element(s), click/type/wait methods (timeouts name the step), bot check
@@ -48,7 +48,6 @@ ATEST03-unit2/
 │   │   ├── test_login.py        # @secure_login: header links, login, logout, password reset (High)
 │   │   ├── test_register.py     # @create_account                   (Medium)
 │   │   ├── test_search.py       # @search_products                  (Medium)
-│   │   ├── test_network.py      # interception, fault injection, throttling
 │   │   └── test_auth_state.py   # saved login (needs a real account)
 │   └── api/                     # API tests: no browser
 │       ├── conftest.py          # shop_api: shop_api.product / .cart / .search
@@ -69,7 +68,7 @@ Requires **Python 3.12**: the version in `.python-version` (PyCharm, VS Code, py
 pip install -r requirements.txt
 cp .env.example .env                 # only for -m auth: a real account (other tests make up accounts with Faker)
 playwright install chromium
-pytest                               # 33 UI + 31 API tests; manual/data_creating/auth excluded
+pytest                               # 29 UI + 31 API tests; manual/data_creating/auth excluded
 pytest tests/api                     # the API tests only (no browser, about 5 s)
 pytest tests/ui                      # the UI tests only
 pytest -m smoke
@@ -131,7 +130,7 @@ Every test carries one requirement marker (`@pytest.mark.add_to_cart` …, decla
 
 - **Login and registration forms are MANUAL** (`@pytest.mark.manual`): the store's bot protection (CAPTCHA) stops them — no request is sent and no error is shown — so a wrong-password test could only fail. The tests are complete; run them with `pytest -m manual` in a test environment without CAPTCHA. Opening the password-reset form is automated.
 - **The theme needs jQuery from `ajax.googleapis.com`**: `block_third_party` allows that one host, otherwise the product page never renders its "Sold Out" button and Add to Cart falls back to a full-page form post. Tracking hosts stay blocked.
-- **Rate limit and bot check**: many runs in a short time from one network make the store answer Add to Cart with HTTP 429 and then show its Cloudflare check ("Just a moment..."). Add to Cart waits once as long as the store's `Retry-After` asks; a second 429, or the check page, stops the test with a message saying so. The check is never bypassed (its script from `challenges.cloudflare.com` is let through only so it works as in any browser). Wait a few minutes, then run again serially, or one folder at a time (`pytest tests/api`, then `pytest tests/ui`).
+- **Rate limit and bot check**: many runs in a short time from one network make the store answer Add to Cart with HTTP 429 and then show its Cloudflare check ("Just a moment..."). The test then stops at once and is reported **SKIPPED** with the reason (`StoreBlockedError`, listed at the end of the run), not FAILED: the store did not answer, so nothing was checked. The check is never bypassed (its script from `challenges.cloudflare.com` is let through only so it works as in any browser). Wait a few minutes, then run again serially, or one folder at a time (`pytest tests/api`, then `pytest tests/ui`).
 - Never commit `.auth/`.
 
 ## ATEST03 course repositories

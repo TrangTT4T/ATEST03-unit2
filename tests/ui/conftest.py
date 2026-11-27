@@ -5,7 +5,7 @@ Fixture map (Day 5-6):
   block_third_party  autouse network control: only the store and Shopify hosts are reached
   shop               Page Objects bound to this test's page
   add_product_and_open_cart   factory fixture: put N of a product in the cart, then open the cart page
-  shop_api_in_browser         API objects bound to the page: share its cookies, watch or change its traffic
+  shop_api_in_browser         API objects bound to the page: they share its cookies (its cart, its login)
   saved_login_state  login once, reuse the saved storage state (auth)
 """
 from pathlib import Path
@@ -68,11 +68,10 @@ def add_product_and_open_cart(shop, products):
 @pytest.fixture
 def shop_api_in_browser(page: Page) -> SimpleNamespace:
     """API objects bound to this test's page: they share the browser's cookies (what .cart adds, the cart
-    page shows) and can watch or change the page's traffic (.cart add-to-cart requests, .network)."""
+    page shows; what .account logs in, the pages see)."""
     request = page.context.request
     return SimpleNamespace(product=ProductApi(request, page), cart=CartApi(request, page),
-                           search=SearchApi(request, page), network=NetworkApi(request, page),
-                           account=AccountApi(request, page))
+                           search=SearchApi(request, page), account=AccountApi(request, page))
 
 
 # --- authentication state (Day 6) ------------------------------------------------

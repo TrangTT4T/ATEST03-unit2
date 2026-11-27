@@ -9,6 +9,8 @@ without CAPTCHA).
 """
 from playwright.sync_api import APIResponse
 
+from helper_utility.store_blocked_error import StoreBlockedError
+
 from .base_api import BaseApi
 
 
@@ -40,7 +42,7 @@ class AccountApi(BaseApi):
 
         Accepted: a redirect to /account. Rejected: HTTP 200, the login page again with its error.
 
-        :raises AssertionError: when the store answers with its bot check
+        :raises StoreBlockedError: when the store answers with its bot check
         """
         return self._post_account_form(self._login, {"form_type": "customer_login", "utf8": "\u2713",
                                                       "customer[email]": email, "customer[password]": password})
@@ -48,7 +50,7 @@ class AccountApi(BaseApi):
     def request_password_reset(self, email: str) -> APIResponse:
         """POST the "Forgot your password?" form for ``email`` (the store then emails a reset link).
 
-        :raises AssertionError: when the store answers with its bot check
+        :raises StoreBlockedError: when the store answers with its bot check
         """
         return self._post_account_form(self._recover, {"form_type": "recover_customer_password", "utf8": "\u2713",
                                                         "email": email})
@@ -60,7 +62,7 @@ class AccountApi(BaseApi):
     def register_account(self, first_name: str, last_name: str, email: str, password: str) -> APIResponse:
         """POST the create-account form. Accepted: the new customer is logged in (a redirect away from the form).
 
-        :raises AssertionError: when the store answers with its bot check
+        :raises StoreBlockedError: when the store answers with its bot check
         """
         return self._post_account_form(self._register, {
             "form_type": "create_customer", "utf8": "\u2713", "customer[first_name]": first_name,
@@ -72,8 +74,8 @@ class AccountApi(BaseApi):
         response = self.post_form(endpoint, form)
         if self.BOT_CHECK_PATH in response.headers.get("location", ""):  # never bypassed: report it clearly
             self.logger.error("The store answered POST %s with its bot check", endpoint)
-            raise AssertionError(f"The store asked to verify a human (redirect to {self.BOT_CHECK_PATH}) "
-                                 f"instead of answering POST {endpoint}")
+            raise StoreBlockedError(f"The store asked to verify a human (redirect to {self.BOT_CHECK_PATH}) "
+                                    f"instead of answering POST {endpoint}")
         return response
 
     # --- Endpoints ------------------------------------------------------------

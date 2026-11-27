@@ -30,7 +30,6 @@ ATEST03-unit2/
     ├── ui/                      # UI tests (browser + page objects); conftest: shop, network control, auth state
     │   ├── test_cart.py  test_checkout.py  test_catalog.py
     │   ├── test_login.py test_register.py  test_search.py   # one file per area, one marker per requirement
-    │   ├── test_network.py      # interception, request assertion, fault injection, throttling
     │   └── test_auth_state.py   # saved login + isolation check
     └── api/                     # API tests (no browser); conftest: shop_api
         └── test_product_api.py  test_cart_api.py  test_search_api.py
@@ -250,7 +249,7 @@ Both rules are part of the review checklist (Day 8, B4).
 cd ATEST03-unit2
 pip install -r requirements.txt
 playwright install chromium
-pytest --collect-only -q          # 41 UI tests (33 in the default run) + 36 API tests (31 in the default run)
+pytest --collect-only -q          # 37 UI tests (29 in the default run) + 36 API tests (31 in the default run)
 pytest -m smoke                   # same smoke markers as Unit 1's tags
 pytest --headed --slowmo 300      # watch it run
 ```
@@ -317,25 +316,9 @@ def block_third_party_hosts(self, store_host: str) -> list[str]:
 
 Allowed: the store host and `*.shopify.com`, `*.myshopify.com`, `*.shopifycdn.com`. Everything else (Facebook, Twitter, Pinterest, the Sauce app) is aborted. Risk R09 (third-party widgets), manual in Unit 1, becomes testable.
 
-#### 2.2 The four network tests (`tests/ui/test_network.py`)
+#### 2.2 Network tests removed
 
-| Test | Technique | Risk |
-| --- | --- | --- |
-| `test_third_party_calls_are_blocked_and_shop_still_works` | `NetworkApi.block_third_party_hosts` (route + abort), `NetworkApi.can_page_reach`, then the cart flow | R09 |
-| `test_add_to_cart_posts_the_product_form` | `CartApi.capture_add_to_cart_request()` (expect_request), `CartApi.request_carries_product_id` | R01 |
-| `test_failed_add_to_cart_request_does_not_add_the_product` | `CartApi.answer_add_to_cart_with_error(500)` (route + fulfill): fault injection | R01 |
-| `test_catalog_loads_on_a_slow_network` | `NetworkApi.throttle_network` (Chromium CDP, 400 ms latency) | R05 |
-
-Network tests carry a risk marker and a requirement marker like every other test (`@pytest.mark.critical`, `@pytest.mark.add_to_cart`).
-
-```python
-shop_api_in_browser.cart.answer_add_to_cart_with_error(500)   # api/cart_api.py routes the request
-shop.product.open_product_page(products["Noir jacket"]["path-name"])
-shop.product.add_to_cart_button.click()
-shop_api_in_browser.cart.stop_answering_add_to_cart()
-shop.cart.open_page()
-expect(shop.cart.quantity_boxes).to_have_count(0)
-```
+The suite once had a `tests/ui/test_network.py` (request assertion, fault injection, slow network). It was removed: those cases tested Playwright techniques more than the store's requirements, and they added load on the live store. What stays is the autouse block above, which keeps every UI test away from third-party scripts.
 
 ### 2b. API testing (`tests/api/`)
 
@@ -348,13 +331,12 @@ The store's pages call a JSON API (the Shopify AJAX API). Testing it directly is
 | `CartApi` | `add_product_to_cart(path_name, quantity)`, `get_cart()`, `change_cart_line_quantity(line, quantity)` | `POST /cart/add.js`, `GET /cart.js`, `POST /cart/change.js` |
 | `SearchApi` | `search_product_titles(keyword)` | `GET /search/suggest.json` |
 | `AccountApi` | `is_logged_in()`, `get_account_redirect()`, `login(email, password)`, `logout()`, `register_account(...)`, `request_password_reset(email)` — the store's account forms, posted without a browser; a redirect to the bot check (`/challenge`) stops with a clear error, it is never bypassed | `GET /account`, `POST /account/login`, `GET /account/logout`, `POST /account`, `POST /account/recover` |
-| `CartApi` (page traffic) | `capture_add_to_cart_request()`, `request_carries_product_id(request)`, `answer_add_to_cart_with_error(status)`, `stop_answering_add_to_cart()` | the page's `POST /cart/add` |
-| `NetworkApi` | `block_third_party_hosts(store_host)`, `can_page_reach(url)`, `throttle_network(...)` | the page's traffic (route, fetch, Chromium DevTools) |
+| `NetworkApi` | `block_third_party_hosts(store_host)` | the page's traffic (route + abort) |
 
 | Fixture | Where | Request context | Used for |
 | --- | --- | --- | --- |
 | `shop_api` | `tests/api/conftest.py` | its own (`playwright.request.new_context`): no browser, its own cart | API tests: `shop_api.product`, `.cart`, `.search`, `.account` (like `shop` for pages) |
-| `shop_api_in_browser` | `tests/ui/conftest.py` | the page's (`page.context.request`) + the page: shares the browser's cookies | UI tests: API set-up, `.cart` page traffic, `.network` |
+| `shop_api_in_browser` | `tests/ui/conftest.py` | the page's (`page.context.request`) + the page: shares the browser's cookies | UI tests: API set-up (`.cart`, `.account`) that the page then shows |
 
 | Test | Checks | Requirement |
 | --- | --- | --- |
@@ -443,14 +425,14 @@ The lab automates the Unit 1 risk priorities on Playwright: 22 browser tests in 
 
 | Priority | Workflow | Risk | Tests | Unit 2 technique |
 | --- | --- | --- | --- | --- |
-| P1 | Add to cart, totals, change, remove | R01 Critical (20) | 5 tests in `test_cart.py` + 3 network tests | `add_product_and_open_cart` fixture, `expect_request`, 500 fault injection |
+| P1 | Add to cart, totals, change, remove | R01 Critical (20) | `test_cart.py` (cases from `dataset/cart.json`) + the cart API tests | `add_product_and_open_cart` fixture, `parametrize`, API set-up |
 | P1 | Cart → checkout | R02 Critical (15) | 1 test in `test_checkout.py` | `expect(page).to_have_url` |
 | P1 | Product detail, sold-out | R03 High (12) | 2 tests in `test_catalog.py` | `//*[@itemprop='name']`, `to_be_disabled()` |
 | P1 | Login, password reset, saved session | R04 High (12) | password reset + 2 auth tests; 2 invalid-login tests are `manual` (CAPTCHA) | `saved_login_state` storage state |
-| P1 | Catalog prices and stock | R05 High (12) | 7 parametrized cases (one per product) + slow-network test | `parametrize`, CDP throttling |
+| P1 | Catalog prices and stock | R05 High (12) | 7 parametrized cases (one per product) | `parametrize` |
 | P2 | Registration validation | R06 Medium (9) | 1 `manual` test (CAPTCHA) + 1 `data_creating` test | — |
 | P2 | Search | R07 Medium (9) | 2 tests in `test_search.py` | no-results message |
-| P2 | Third-party failure does not break shopping | R09 Medium (6) | 1 network test | `block_third_party` route |
+| P2 | Third-party failure does not break shopping | R09 Medium (6) | every UI test runs with third-party hosts blocked | `block_third_party` route |
 
 ### 2. Files
 
@@ -458,7 +440,6 @@ The lab automates the Unit 1 risk priorities on Playwright: 22 browser tests in 
 | --- | --- |
 | `tests/ui/test_<area>.py` | One file per area; every test has a risk, a suite and a requirement marker |
 | `tests/conftest.py` | Fixtures, network control, auth state |
-| `tests/ui/test_network.py` | Interception, request assertion, fault injection, throttling |
 | `tests/ui/test_auth_state.py` | Saved login and isolation check |
 | `pages/` | Page Objects ported from Unit 1 |
 | `pytest.ini` | base URL, tracing, reports, default marker filter, marker list (`--strict-markers`) |
@@ -481,17 +462,17 @@ pytest -m "critical and not negative"
 
 | Check | Result |
 | --- | --- |
-| `pytest` | 63 passed (33 UI + 30 API), 1 xfailed (API, finding A1), 13 deselected (`auth` ×4, `manual` ×7, `data_creating` ×2) |
+| `pytest` | 59 passed (29 UI + 30 API), 1 xfailed (API, finding A1), 13 deselected (`auth` ×4, `manual` ×7, `data_creating` ×2) |
 | `pytest -n auto` | 35 passed, 1 xfailed (run on an earlier version of the suite; the live store is normally run serially to keep its load light) |
 | `pytest -m auth` (with an account) | 2 passed |
 | Failed test | `test-results/<test>/trace.zip`, screenshot, video |
 
-Verified on the live store (2026-11-25). Two things the live store taught the suite: the theme needs jQuery from `ajax.googleapis.com` (blocked, the "Sold Out" button never renders and Add to Cart turns into a full-page post), and its CAPTCHA stops the login and registration forms. A third came on 2026-11-27: many runs from one network in a short time get HTTP 429 on Add to Cart, then the Cloudflare check ("Just a moment..."). Add to Cart waits once for the store's `Retry-After`; a second 429 or the check page stops the test with a clear message (never bypassed). Wait a few minutes and run serially, one folder at a time if needed.
+Verified on the live store (2026-11-25). Two things the live store taught the suite: the theme needs jQuery from `ajax.googleapis.com` (blocked, the "Sold Out" button never renders and Add to Cart turns into a full-page post), and its CAPTCHA stops the login and registration forms. A third came on 2026-11-27: many runs from one network in a short time get HTTP 429 on Add to Cart, then the Cloudflare check ("Just a moment..."). Such a test stops at once and is reported SKIPPED with the reason (`StoreBlockedError` + a `pytest_runtest_makereport` hook in `tests/conftest.py`), not FAILED; the check is never bypassed. Wait a few minutes and run serially, one folder at a time if needed.
 
 ### 5. Lab tasks
 
 1. Add a fault-injection test: the cart page answers 503. What should the customer see? Write the assertion.
-2. Make `test_catalog_loads_on_a_slow_network` fail by lowering the timeout to 1 s, then open its trace and find the slow request.
+2. Make `test_product_page_shows_the_catalog_name_and_price` fail by changing the expected price, then open its trace and find the failing step.
 3. Add a search test for "sandals" with the right requirement and risk markers. Run `pytest -m search_products` and check that it runs with the other REQ-08 tests.
 4. Run `pytest -n auto` three times and compare durations with the serial run.
 
@@ -513,7 +494,7 @@ Day 8 closes both units: part A revises Unit 2 against Unit 1, part B makes the 
 | Isolation | New browser per scenario | New context per test |
 | Waiting | `WebDriverWait` | Actions auto-wait, `expect()` retries |
 | Failure evidence | Screenshot | Trace + screenshot + video |
-| Network | Not controlled | Block, assert, fault-inject, throttle |
+| Network | Not controlled | Third-party hosts blocked in every UI test |
 | Login | UI login each time | Saved storage state |
 | Speed | Serial | `-n auto` parallel |
 | Selection | `behave --tags=@cart` | `pytest tests/ui/test_cart.py`, `pytest -m add_to_cart` |

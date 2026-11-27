@@ -30,7 +30,6 @@ ATEST03-unit2/
     ├── ui/                      # test giao diện (trình duyệt + page object); conftest: shop, kiểm soát network, đăng nhập
     │   ├── test_cart.py  test_checkout.py  test_catalog.py
     │   ├── test_login.py test_register.py  test_search.py   # mỗi khu vực một file, mỗi yêu cầu một marker
-    │   ├── test_network.py      # chặn request, kiểm tra request, giả lập lỗi, mạng chậm
     │   └── test_auth_state.py   # phiên đăng nhập đã lưu + kiểm tra cô lập
     └── api/                     # test API (không trình duyệt); conftest: shop_api
         └── test_product_api.py  test_cart_api.py  test_search_api.py
@@ -250,7 +249,7 @@ Hai quy tắc này nằm trong checklist review (Day 8, B4).
 cd ATEST03-unit2
 pip install -r requirements.txt
 playwright install chromium
-pytest --collect-only -q          # 41 test giao diện (33 chạy mặc định) + 36 test API (31 chạy mặc định)
+pytest --collect-only -q          # 37 test giao diện (29 chạy mặc định) + 36 test API (31 chạy mặc định)
 pytest -m smoke                   # cùng tag smoke như Unit 1
 pytest --headed --slowmo 300      # xem trình duyệt chạy
 ```
@@ -317,25 +316,9 @@ def block_third_party_hosts(self, store_host: str) -> list[str]:
 
 Cho phép: host của store và `*.shopify.com`, `*.myshopify.com`, `*.shopifycdn.com`. Mọi host khác (Facebook, Twitter, Pinterest, ứng dụng Sauce) bị hủy. Rủi ro R09 (widget bên thứ ba), vốn kiểm thủ công ở Unit 1, giờ test được.
 
-#### 2.2 Bốn test network (`tests/ui/test_network.py`)
+#### 2.2 Đã bỏ các test network
 
-| Test | Kỹ thuật | Risk |
-| --- | --- | --- |
-| `test_third_party_calls_are_blocked_and_shop_still_works` | `NetworkApi.block_third_party_hosts` (route + abort), `NetworkApi.can_page_reach`, rồi chạy luồng giỏ hàng | R09 |
-| `test_add_to_cart_posts_the_product_form` | `CartApi.capture_add_to_cart_request()` (expect_request), `CartApi.request_carries_product_id` | R01 |
-| `test_failed_add_to_cart_request_does_not_add_the_product` | `CartApi.answer_add_to_cart_with_error(500)` (route + fulfill): giả lập lỗi | R01 |
-| `test_catalog_loads_on_a_slow_network` | `NetworkApi.throttle_network` (Chromium CDP, trễ 400 ms) | R05 |
-
-Test network cũng mang marker rủi ro và marker yêu cầu như mọi test khác (`@pytest.mark.critical`, `@pytest.mark.add_to_cart`).
-
-```python
-shop_api_in_browser.cart.answer_add_to_cart_with_error(500)   # api/cart_api.py routes the request
-shop.product.open_product_page(products["Noir jacket"]["path-name"])
-shop.product.add_to_cart_button.click()
-shop_api_in_browser.cart.stop_answering_add_to_cart()
-shop.cart.open_page()
-expect(shop.cart.quantity_boxes).to_have_count(0)
-```
+Bộ test từng có `tests/ui/test_network.py` (kiểm tra request, giả lập lỗi, mạng chậm). File này đã được bỏ: các ca đó chủ yếu thử kỹ thuật của Playwright hơn là yêu cầu của store, và làm tăng tải lên store thật. Phần còn lại là fixture autouse ở trên, giữ mọi test giao diện tránh xa script bên thứ ba.
 
 ### 2b. Test API (`tests/api/`)
 
@@ -348,13 +331,12 @@ Các trang của store gọi một API JSON (Shopify AJAX API). Test thẳng API
 | `CartApi` | `add_product_to_cart(path_name, quantity)`, `get_cart()`, `change_cart_line_quantity(line, quantity)` | `POST /cart/add.js`, `GET /cart.js`, `POST /cart/change.js` |
 | `SearchApi` | `search_product_titles(keyword)` | `GET /search/suggest.json` |
 | `AccountApi` | `is_logged_in()`, `get_account_redirect()`, `login(email, password)`, `logout()`, `register_account(...)`, `request_password_reset(email)` — gửi các form tài khoản của store mà không cần trình duyệt; nếu bị chuyển sang trang kiểm tra bot (`/challenge`) thì dừng với thông báo rõ ràng, không bao giờ vượt qua | `GET /account`, `POST /account/login`, `GET /account/logout`, `POST /account`, `POST /account/recover` |
-| `CartApi` (traffic của page) | `capture_add_to_cart_request()`, `request_carries_product_id(request)`, `answer_add_to_cart_with_error(status)`, `stop_answering_add_to_cart()` | `POST /cart/add` của page |
-| `NetworkApi` | `block_third_party_hosts(store_host)`, `can_page_reach(url)`, `throttle_network(...)` | traffic của page (route, fetch, Chromium DevTools) |
+| `NetworkApi` | `block_third_party_hosts(store_host)` | traffic của page (route + abort) |
 
 | Fixture | Ở đâu | Request context | Dùng cho |
 | --- | --- | --- | --- |
 | `shop_api` | `tests/api/conftest.py` | riêng (`playwright.request.new_context`): không trình duyệt, giỏ riêng | test API: `shop_api.product`, `.cart`, `.search`, `.account` (giống `shop` cho page) |
-| `shop_api_in_browser` | `tests/ui/conftest.py` | của page (`page.context.request`) + page: dùng chung cookie với trình duyệt | test giao diện: chuẩn bị dữ liệu bằng API, traffic `.cart`, `.network` |
+| `shop_api_in_browser` | `tests/ui/conftest.py` | của page (`page.context.request`) + page: dùng chung cookie với trình duyệt | test giao diện: chuẩn bị dữ liệu bằng API (`.cart`, `.account`) rồi page hiển thị |
 
 | Test | Kiểm tra | Yêu cầu |
 | --- | --- | --- |
@@ -443,14 +425,14 @@ Bài lab tự động hóa các ưu tiên rủi ro của Unit 1 trên Playwright
 
 | Ưu tiên | Luồng | Risk | Test | Kỹ thuật Unit 2 |
 | --- | --- | --- | --- | --- |
-| P1 | Thêm vào giỏ, tổng tiền, đổi, xóa | R01 Critical (20) | 5 test trong `test_cart.py` + 3 test network | fixture `add_product_and_open_cart`, `expect_request`, giả lập lỗi 500 |
+| P1 | Thêm vào giỏ, tổng tiền, đổi, xóa | R01 Critical (20) | `test_cart.py` (các ca trong `dataset/cart.json`) + test API giỏ hàng | fixture `add_product_and_open_cart`, `parametrize`, chuẩn bị bằng API |
 | P1 | Giỏ hàng → checkout | R02 Critical (15) | 1 test trong `test_checkout.py` | `expect(page).to_have_url` |
 | P1 | Trang chi tiết, hàng hết | R03 High (12) | 2 test trong `test_catalog.py` | `//*[@itemprop='name']`, `to_be_disabled()` |
 | P1 | Đăng nhập, reset mật khẩu, phiên đã lưu | R04 High (12) | reset mật khẩu + 2 test auth; 2 test đăng nhập sai là `manual` (CAPTCHA) | storage state `saved_login_state` |
-| P1 | Giá và tình trạng trên catalog | R05 High (12) | 7 trường hợp parametrize (mỗi sản phẩm một) + test mạng chậm | `parametrize`, giới hạn băng thông qua CDP |
+| P1 | Giá và tình trạng trên catalog | R05 High (12) | 7 trường hợp parametrize (mỗi sản phẩm một) | `parametrize` |
 | P2 | Kiểm tra lỗi đăng ký | R06 Medium (9) | 1 test `manual` (CAPTCHA) + 1 test `data_creating` | — |
 | P2 | Tìm kiếm | R07 Medium (9) | 2 test trong `test_search.py` | thông báo không có kết quả |
-| P2 | Dịch vụ bên thứ ba lỗi không làm hỏng việc mua hàng | R09 Medium (6) | 1 test network | route của `block_third_party` |
+| P2 | Dịch vụ bên thứ ba lỗi không làm hỏng việc mua hàng | R09 Medium (6) | mọi test giao diện chạy khi host bên thứ ba bị chặn | route của `block_third_party` |
 
 ### 2. File
 
@@ -458,7 +440,6 @@ Bài lab tự động hóa các ưu tiên rủi ro của Unit 1 trên Playwright
 | --- | --- |
 | `tests/ui/test_<khu_vực>.py` | Mỗi khu vực một file; test nào cũng có marker rủi ro, bộ chạy và yêu cầu |
 | `tests/conftest.py` | Fixture, kiểm soát network, trạng thái đăng nhập |
-| `tests/ui/test_network.py` | Chặn request, kiểm tra request, giả lập lỗi, mạng chậm |
 | `tests/ui/test_auth_state.py` | Phiên đăng nhập đã lưu và kiểm tra cô lập |
 | `pages/` | Page Object chuyển từ Unit 1 |
 | `pytest.ini` | base URL, tracing, báo cáo, bộ lọc marker mặc định, danh sách marker (`--strict-markers`) |
@@ -481,17 +462,17 @@ pytest -m "critical and not negative"
 
 | Kiểm tra | Kết quả |
 | --- | --- |
-| `pytest` | 63 pass (33 giao diện + 30 API), 1 xfailed (API, phát hiện A1), 13 bị lọc (`auth` ×4, `manual` ×7, `data_creating` ×2) |
+| `pytest` | 59 pass (29 giao diện + 30 API), 1 xfailed (API, phát hiện A1), 13 bị lọc (`auth` ×4, `manual` ×7, `data_creating` ×2) |
 | `pytest -n auto` | 35 pass, 1 xfailed (chạy trên phiên bản cũ của bộ test; với store thật thường chạy tuần tự để tải nhẹ) |
 | `pytest -m auth` (có tài khoản) | 2 pass |
 | Test fail | `test-results/<test>/trace.zip`, ảnh, video |
 
-Đã chạy trên store thật (2026-11-25). Store thật dạy bộ test hai điều: theme cần jQuery từ `ajax.googleapis.com` (bị chặn thì nút "Sold Out" không bao giờ hiện và Add to Cart thành post cả trang), và CAPTCHA của store chặn form đăng nhập và đăng ký. Điều thứ ba (2026-11-27): chạy nhiều lần từ cùng một mạng trong thời gian ngắn thì Add to Cart bị HTTP 429, rồi store hiện trang kiểm tra Cloudflare ("Just a moment..."). Add to Cart chờ một lần theo `Retry-After` của store; bị 429 lần nữa hoặc gặp trang kiểm tra thì test dừng với thông báo rõ ràng (không bao giờ vượt qua). Đợi vài phút rồi chạy tuần tự, cần thì chạy từng thư mục.
+Đã chạy trên store thật (2026-11-25). Store thật dạy bộ test hai điều: theme cần jQuery từ `ajax.googleapis.com` (bị chặn thì nút "Sold Out" không bao giờ hiện và Add to Cart thành post cả trang), và CAPTCHA của store chặn form đăng nhập và đăng ký. Điều thứ ba (2026-11-27): chạy nhiều lần từ cùng một mạng trong thời gian ngắn thì Add to Cart bị HTTP 429, rồi store hiện trang kiểm tra Cloudflare ("Just a moment..."). Test như vậy dừng ngay và được ghi là SKIPPED kèm lý do (`StoreBlockedError` + hook `pytest_runtest_makereport` trong `tests/conftest.py`), không phải FAILED; không bao giờ vượt qua bước kiểm tra. Đợi vài phút rồi chạy tuần tự, cần thì chạy từng thư mục.
 
 ### 5. Nhiệm vụ lab
 
 1. Thêm test giả lập lỗi: trang giỏ hàng trả 503. Khách hàng phải thấy gì? Viết assertion.
-2. Làm `test_catalog_loads_on_a_slow_network` fail bằng cách giảm timeout xuống 1 giây, mở trace và tìm request chậm.
+2. Làm `test_product_page_shows_the_catalog_name_and_price` fail bằng cách đổi giá mong đợi, mở trace và tìm bước bị fail.
 3. Thêm một test tìm "sandals" với đúng marker yêu cầu và rủi ro. Chạy `pytest -m search_products` và kiểm tra nó chạy cùng các test khác của REQ-08.
 4. Chạy `pytest -n auto` ba lần, so thời gian với chạy tuần tự.
 
@@ -513,7 +494,7 @@ Day 8 khép lại cả hai Unit: phần A ôn tập Unit 2 so với Unit 1; ph�
 | Cô lập | Trình duyệt mới mỗi scenario | Context mới mỗi test |
 | Chờ | `WebDriverWait` | Action tự chờ, `expect()` tự thử lại |
 | Bằng chứng lỗi | Ảnh chụp | Trace + ảnh + video |
-| Network | Không kiểm soát | Chặn, kiểm tra, giả lập lỗi, giả lập chậm |
+| Network | Không kiểm soát | Chặn host bên thứ ba trong mọi test giao diện |
 | Đăng nhập | Đăng nhập qua UI mỗi lần | Dùng lại storage state đã lưu |
 | Tốc độ | Tuần tự | Song song `-n auto` |
 | Lọc | `behave --tags=@cart` | `pytest tests/ui/test_cart.py`, `pytest -m add_to_cart` |

@@ -19,6 +19,7 @@ import pytest
 from dotenv import load_dotenv
 
 from helper_utility.helpers import Helper
+from helper_utility.store_blocked_error import StoreBlockedError
 from helper_utility.steps import Steps
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -35,6 +36,21 @@ def pytest_configure(config):
     """
     if not hasattr(config, "workerinput"):
         shutil.rmtree(ALLURE_RESULTS, ignore_errors=True)
+
+
+@pytest.hookimpl(wrapper=True)
+def pytest_runtest_makereport(item, call):
+    """Report a test the live store blocked (HTTP 429, bot check) as SKIPPED with the reason, not FAILED.
+
+    The store did not answer, so the test checked nothing: the fix is a rerun later, not a code change.
+    The reason is listed at the end of the run (-rs in pytest.ini).
+    """
+    report = yield
+    if call.excinfo is not None and call.excinfo.errisinstance(StoreBlockedError):
+        path, line, _ = item.reportinfo()
+        report.outcome = "skipped"
+        report.longrepr = (str(path), (line or 0) + 1, f"Store blocked this network: {call.excinfo.value}")
+    return report
 
 
 # --- data ---------------------------------------------------------------------

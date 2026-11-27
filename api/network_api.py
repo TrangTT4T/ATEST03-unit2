@@ -1,7 +1,7 @@
-"""Network API: the browser page's traffic - block third-party hosts, probe a URL, throttle the network.
+"""Network API: the browser page's traffic - block third-party hosts.
 
-Used by the UI tests (it needs a page); kept here, with the other API objects, so that no test or
-fixture routes or sends requests itself.
+Used by the autouse fixture block_third_party of the UI tests (it needs a page); kept here, with the
+other API objects, so that no test or fixture routes requests itself.
 """
 from functools import partial
 from urllib.parse import urlparse
@@ -40,32 +40,6 @@ class NetworkApi(BaseApi):
         host = urlparse(url).hostname or ""
         allowed_hosts = (store_host, "localhost", "127.0.0.1", *self.THEME_DEPENDENCIES)
         return host in allowed_hosts or host.endswith(self.SHOPIFY_SUFFIXES)
-
-    def can_page_reach(self, url: str) -> bool:
-        """True when a fetch() made by the page to ``url`` gets an answer (False: blocked or unreachable)."""
-        reached = self.page.evaluate("url => fetch(url).then(() => true, () => false)", url)
-        self.logger.info("fetch %s from the page -> %s", url, "reached" if reached else "blocked")
-        return reached
-
-    ############################################################################
-    # Network speed methods
-    # Scope: Browser (Chromium only) > DevTools network emulation
-    ############################################################################
-    def throttle_network(self, latency_ms: int, download_bytes_per_second: int, upload_bytes_per_second: int):
-        """Slow the page's network down through the Chromium DevTools protocol.
-
-        :param latency_ms: added round-trip time
-        :param download_bytes_per_second: download speed
-        :param upload_bytes_per_second: upload speed
-        """
-        devtools = self.page.context.new_cdp_session(self.page)
-        devtools.send("Network.enable")
-        devtools.send("Network.emulateNetworkConditions", {
-            "offline": False, "latency": latency_ms,
-            "downloadThroughput": download_bytes_per_second, "uploadThroughput": upload_bytes_per_second,
-        })
-        self.logger.info("Throttle: %s ms, %s B/s down, %s B/s up",
-                         latency_ms, download_bytes_per_second, upload_bytes_per_second)
 
     # --- Hosts ------------------------------------------------------------------
     SHOPIFY_SUFFIXES = (".shopify.com", ".myshopify.com", ".shopifycdn.com", ".shopifycloud.com", ".shopifysvc.com")
