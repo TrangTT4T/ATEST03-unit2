@@ -45,7 +45,7 @@ def test_add_to_cart_posts_the_product_form(shop, page, products, step):
         shop.product.open_product_page(striped_top["path-name"])
     with step("Add to cart and capture the /cart/add request"):
         with page.expect_request(lambda r: "/cart/add" in r.url and r.method == "POST") as request_info:
-            shop.product.add_button.click()
+            shop.product.add_to_cart_button.click()
     with step("Verify the request carries the product id"):
         body = request_info.value.post_data or ""  # multipart (FormData) or url-encoded, depending on the theme
         assert 'name="id"' in body or "id=" in body, "add-to-cart POST carries no product id"
@@ -64,11 +64,11 @@ def test_failed_add_to_cart_request_does_not_add_the_product(shop, page, product
         page.route("**/cart/add*", lambda route: route.fulfill(status=500, body="Internal Server Error"))
     with step("Open the product page of Noir jacket and click Add to Cart"):
         shop.product.open_product_page(noir_jacket["path-name"])
-        shop.product.add_button.click()
+        shop.product.add_to_cart_button.click()
     with step("Restore the network and verify the cart is empty"):
         page.unroute("**/cart/add*")
         shop.cart.open_page()
-        expect(shop.cart.quantity_inputs).to_have_count(0)
+        expect(shop.cart.quantity_boxes).to_have_count(0)
 
 
 @pytest.mark.high

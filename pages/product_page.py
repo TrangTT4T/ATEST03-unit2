@@ -35,26 +35,26 @@ class ProductPage(BasePage):
     # Scope: Product page > Add to cart form
     ############################################################################
     @property
-    def add_button(self) -> Locator:
+    def add_to_cart_button(self) -> Locator:
         """The Add to Cart button."""
-        return self.find_element(self._add_button)
+        return self.find_element(self._add_to_cart_button)
 
     def add_to_cart(self, quantity: int = 1):
         """Add ``quantity`` items and wait until the store has answered every add."""
         if self.is_element_visible(self._quantity):
             self.type_text(self._quantity, str(quantity))
-            self._click_add()
+            self._click_add_to_cart_and_wait()
         else:  # theme without a visible quantity box: add the product N times
             for _ in range(quantity):
-                self._click_add()
+                self._click_add_to_cart_and_wait()
 
-    def _click_add(self):
+    def _click_add_to_cart_and_wait(self):
         """Add to Cart is AJAX: the theme posts /cart/add.js and stays on the page.
 
         Wait for the server's answer to THIS click (Day 6: network-aware waits). A navigation or
         load-state wait would hang or return at once - neither proves that the add finished.
         """
-        answer = self.click_and_wait_for_response(self._add_button, url_part="/cart/add")
+        answer = self.click_and_wait_for_response(self._add_to_cart_button, url_part="/cart/add")
         if not answer.ok:
             raise AssertionError(f"add to cart failed: HTTP {answer.status}")
 
@@ -64,5 +64,5 @@ class ProductPage(BasePage):
     _price = "//*[@id='product-price']"
     _sold_out_button = "//input[@type='submit' and @value='Sold Out']"
     # Add to cart form (standard Shopify)
-    _add_button = "//form[contains(@action,'/cart/add')]//*[@type='submit']"
+    _add_to_cart_button = "//form[contains(@action,'/cart/add')]//*[@type='submit']"
     _quantity = "//form[contains(@action,'/cart/add')]//input[@name='quantity']"

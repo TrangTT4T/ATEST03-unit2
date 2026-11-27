@@ -18,16 +18,16 @@ class CartPage(BasePage):
     # Scope: Cart page > Cart table
     ############################################################################
     @property
-    def quantity_inputs(self) -> Locator:
+    def quantity_boxes(self) -> Locator:
         """The quantity box of every cart line."""
-        return self.find_elements(self._quantity_inputs)
+        return self.find_elements(self._quantity_boxes)
 
     def count_items_in_cart(self) -> int:
         """Sum of the quantity boxes: the number of items in the cart."""
-        boxes = self.quantity_inputs
+        boxes = self.quantity_boxes
         return sum(int(boxes.nth(i).input_value() or 0) for i in range(boxes.count()))
 
-    def change_quantity(self, product_name: str, quantity: int):
+    def change_product_quantity(self, product_name: str, quantity: int):
         """Type ``quantity`` in the line of ``product_name`` and click Update.
 
         Quantity 0 + Update removes the line (standard Shopify behaviour).
@@ -37,7 +37,7 @@ class CartPage(BasePage):
 
     def remove_product_from_cart(self, product_name: str):
         """Remove the line of ``product_name`` (quantity 0 + Update)."""
-        self.change_quantity(product_name, 0)
+        self.change_product_quantity(product_name, 0)
 
     ############################################################################
     # Total and checkout methods
@@ -59,7 +59,7 @@ class CartPage(BasePage):
     # --- Locators -------------------------------------------------------------
     # Cart table (inside #cart; the hidden mini-cart drawer repeats every row)
     _cart_form = "//*[@id='cart']"
-    _quantity_inputs = "//*[@id='cart']//input[starts-with(@name,'updates')]"
+    _quantity_boxes = "//*[@id='cart']//input[starts-with(@name,'updates')]"
     _line_quantity = (  # the quantity box in the row of one product: .format(product_name)
         "//*[@id='cart']//div[contains(@class,'row')][.//a[contains(normalize-space(),'{}')]]"
         "//input[starts-with(@name,'updates')]"

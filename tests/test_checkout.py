@@ -9,11 +9,11 @@ from playwright.sync_api import expect
 @pytest.mark.critical
 @pytest.mark.smoke
 @pytest.mark.start_checkout
-def test_checkout_opens_from_a_non_empty_cart(shop, page, cart_with, step):
+def test_checkout_opens_from_a_non_empty_cart(shop, page, add_product_and_open_cart, step):
     """From a cart with one product, Checkout opens the checkout page listing that product."""
     # Execution steps
     with step("Put 1 x Grey jacket in the cart"):
-        cart = cart_with("Grey jacket", 1)
+        cart = add_product_and_open_cart("Grey jacket", 1)
     with step("Start checkout from the cart"):
         cart.click_checkout()
     with step("Verify the checkout page lists Grey jacket"):

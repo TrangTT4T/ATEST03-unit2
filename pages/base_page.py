@@ -15,7 +15,7 @@ Pages never call ``self.page.locator``, ``goto`` or ``expect_*`` themselves: the
 methods, which log the action and name the locator in their errors. Playwright waits on every action
 and ``expect()`` retries, so nothing here sleeps for a fixed time.
 
-Layout of every page object (one class per file), checked by tests/unit/test_page_objects_layout.py:
+Layout of every page object (one class per file):
 
 * methods grouped under ``####`` banners that name the area of the page (``# Scope: ...``);
 * a docstring on every public method and property;

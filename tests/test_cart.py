@@ -12,7 +12,7 @@ from pages import BasePage, CartPage
 pytestmark = pytest.mark.critical
 
 
-def expect_cart(cart: CartPage, items: int, total: str) -> None:
+def verify_cart_contents(cart: CartPage, items: int, total: str) -> None:
     """The cart holds ``items`` items in all and its total is ``total`` (e.g. "£55.00")."""
     expect(cart.header_cart_link).to_have_text(re.compile(rf"My Cart \({items}\)"))  # retries until updated
     assert cart.count_items_in_cart() == items
@@ -33,7 +33,7 @@ def test_add_an_in_stock_product_to_the_cart(shop, products, step):
         shop.product.add_to_cart(1)
     with step("Verify the cart has 1 item, total £55.00"):
         shop.cart.open_page()
-        expect_cart(shop.cart, 1, "£55.00")
+        verify_cart_contents(shop.cart, 1, "£55.00")
 
 
 @pytest.mark.regression
@@ -43,36 +43,36 @@ def test_add_an_in_stock_product_to_the_cart(shop, products, step):
     [("Noir jacket", 2, "£120.00"), ("Striped top", 3, "£150.00")],
     ids=["noir-jacket-x2", "striped-top-x3"],
 )
-def test_cart_total_equals_price_times_quantity(cart_with, step, product, quantity, total):
+def test_cart_total_equals_price_times_quantity(add_product_and_open_cart, step, product, quantity, total):
     """The cart total of N items of one product is N times its price."""
     # Execution steps
     with step(f"Put {quantity} x {product} in the cart"):
-        cart = cart_with(product, quantity)
+        cart = add_product_and_open_cart(product, quantity)
     with step(f"Verify the cart has {quantity} items, total {total}"):
-        expect_cart(cart, quantity, total)
+        verify_cart_contents(cart, quantity, total)
 
 
 @pytest.mark.regression
 @pytest.mark.update_cart
-def test_change_the_quantity_of_a_product_in_the_cart(cart_with, step):
+def test_change_the_quantity_of_a_product_in_the_cart(add_product_and_open_cart, step):
     """Changing a line's quantity in the cart updates the item count and the total."""
     # Execution steps
     with step("Put 1 x Bronze sandals in the cart"):
-        cart = cart_with("Bronze sandals", 1)
+        cart = add_product_and_open_cart("Bronze sandals", 1)
     with step("Change the quantity of Bronze sandals to 2"):
-        cart.change_quantity("Bronze sandals", 2)
+        cart.change_product_quantity("Bronze sandals", 2)
     with step("Verify the cart has 2 items, total £79.98"):
-        expect_cart(cart, 2, "£79.98")
+        verify_cart_contents(cart, 2, "£79.98")
 
 
 @pytest.mark.regression
 @pytest.mark.update_cart
-def test_remove_the_only_product_from_the_cart(cart_with, step):
+def test_remove_the_only_product_from_the_cart(add_product_and_open_cart, step):
     """Removing the only line leaves an empty cart."""
     # Execution steps
     with step("Put 1 x Striped top in the cart"):
-        cart = cart_with("Striped top", 1)
+        cart = add_product_and_open_cart("Striped top", 1)
     with step("Remove Striped top from the cart"):
         cart.remove_product_from_cart("Striped top")
     with step("Verify the cart has no lines left"):
-        expect(cart.quantity_inputs).to_have_count(0)
+        expect(cart.quantity_boxes).to_have_count(0)

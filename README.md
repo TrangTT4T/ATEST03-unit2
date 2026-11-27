@@ -30,6 +30,7 @@ ATEST03-unit2/
 ├── dataset/
 │   └── products.json            # Unit 1 test data
 ├── .env.example                 # account variables to copy into .env (git ignores .env: never pushed)
+├── api/                         # API objects: StoreApi (Shopify AJAX API), endpoints at the bottom
 ├── pages/                       # Page Objects: one class per file, locator strings at the bottom;
 │                                #   BasePage = find_element(s), click/type/wait methods, money_to_float()
 ├── tests/
@@ -41,8 +42,8 @@ ATEST03-unit2/
 │   ├── test_register.py         # @create_account                   (Medium)
 │   ├── test_search.py           # @search_products                  (Medium)
 │   ├── test_network.py          # interception, fault injection, throttling
-│   ├── test_auth_state.py       # saved login (needs a real account)
-│   └── unit/                    # framework rules: page-object and test layout, BasePage methods (local HTML)
+│   ├── test_api.py              # the store's JSON API: products, cart, search (finding A1)
+│   └── test_auth_state.py       # saved login (needs a real account)
 ├── helper_utility/helpers.py    # class Helper: by_locator() = locator string -> Playwright selector
 ├── helper_utility/steps.py      # the `step` fixture: numbered steps -> Allure step + trace group
 └── docs/Unit2_Playwright_vi.md, Unit2_Playwright_en.md
@@ -56,7 +57,8 @@ Requires **Python 3.12**: the version in `.python-version` (PyCharm, VS Code, py
 pip install -r requirements.txt
 cp .env.example .env                 # then fill in the account values (only for -m auth / manual / data_creating)
 playwright install chromium
-pytest                               # 22 browser tests + 37 framework tests; manual/data_creating/auth excluded
+pytest                               # 22 browser + 14 API tests; manual/data_creating/auth excluded
+pytest -m api                        # the API tests only (about 10 s)
 pytest -m smoke
 pytest -m critical                   # every Critical-risk test
 pytest -m add_to_cart                # every test of one requirement
@@ -89,7 +91,7 @@ def test_add_an_in_stock_product_to_the_cart(shop, products, step):
         shop.product.add_to_cart(1)
     with step("Verify the cart has 1 item, total £55.00"):
         shop.cart.open_page()
-        expect_cart(shop.cart, 1, "£55.00")
+        verify_cart_contents(shop.cart, 1, "£55.00")
 ```
 
 ## Reports

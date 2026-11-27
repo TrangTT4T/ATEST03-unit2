@@ -20,14 +20,15 @@ ATEST03-unit2/
 ├── requirements.txt
 ├── dataset/products.json        # same test data as Unit 1
 ├── .env.example                 # account variables; copy to .env (git ignores .env, so it is never pushed)
+├── api/                         # API objects: StoreApi (Shopify AJAX API), endpoints at the bottom
 ├── pages/                       # Playwright Page Objects (ported from Unit 1): one class per file
 └── tests/
     ├── conftest.py              # fixtures: data, isolation, network control, auth state
     ├── test_cart.py  test_checkout.py  test_catalog.py
     ├── test_login.py test_register.py  test_search.py   # one file per area, one marker per requirement
     ├── test_network.py          # interception, request assertion, fault injection, throttling
-    ├── test_auth_state.py       # saved login + isolation check
-    └── unit/                    # framework rules: page-object and test layout, BasePage methods (local HTML)
+    ├── test_api.py              # the store's JSON API (api/store_api.py)
+    └── test_auth_state.py       # saved login + isolation check
 helper_utility/helpers.py        # class Helper: by_locator() = locator string -> Playwright selector
 helper_utility/steps.py          # the `step` fixture: numbered steps -> Allure step + trace group
 ```
@@ -86,7 +87,7 @@ Locators are plain XPath strings that describe the element, grouped under a comm
     # --- Locators -------------------------------------------------------------
     # Cart table (inside #cart; the hidden mini-cart drawer repeats every row)
     _cart_form = "//*[@id='cart']"
-    _quantity_inputs = "//*[@id='cart']//input[starts-with(@name,'updates')]"
+    _quantity_boxes = "//*[@id='cart']//input[starts-with(@name,'updates')]"
     # Cart buttons
     _update_button = "//*[@id='update']"
     _checkout_button = "//*[@id='checkout']"
@@ -115,7 +116,7 @@ Pages never call `self.page`: they call the `BasePage` methods, which log the ac
 
 No method returns the page for chaining: open a page, then use it, on two lines. Only methods the pages or tests use are kept.
 
-`tests/unit/test_page_objects_layout.py` fails the run on a locator that `Helper.by_locator()` rejects, on `self.page` outside `BasePage`, or on any code outside the page class; `tests/unit/test_base_page_methods.py` runs every locator prefix and the methods in Chromium against local HTML (no network).
+These layout rules are checked in review (Day 8, B4 checklist): a locator that `Helper.by_locator()` rejects fails the first test that uses it, with the locator in the message.
 
 ### 4. Fixtures (`tests/conftest.py`)
 
@@ -126,14 +127,14 @@ No method returns the page for chaining: open a page, then use it, on two lines.
 | `products` | session | `before_all` loading JSON | Reads `dataset/products.json` |
 | `accounts` | session | — | Test accounts by name (`unknown-user`, `new-customer` …) built from `.env`; git ignores `.env`, so no email or password ever goes to GitHub. A missing variable skips the account tests and names it |
 | `shop` | test | `Helper.create_page_object()` | All Page Objects bound to this test's page |
-| `cart_with` | test | `Given ... in the cart` step | Factory: `cart_with("Noir jacket", 2)` |
+| `add_product_and_open_cart` | test | `Given ... in the cart` step | Factory: `add_product_and_open_cart("Noir jacket", 2)` |
 | `block_third_party` | test, autouse | — | Network control (Day 6) |
-| `customer_state` | session | — | Saved login (Day 6) |
+| `saved_login_state` | session | — | Saved login (Day 6) |
 
 ```python
 @pytest.fixture
-def cart_with(shop, products):
-    """Factory fixture: cart_with("Noir jacket", 2) puts 2 Noir jackets in this test's cart."""
+def add_product_and_open_cart(shop, products):
+    """Factory fixture: add_product_and_open_cart("Noir jacket", 2) puts 2 Noir jackets in this test's cart."""
     def _add(name: str, quantity: int = 1):
         shop.product.open_product_page(products[name]["path-name"])
         shop.product.add_to_cart(quantity)
@@ -162,13 +163,13 @@ def test_add_an_in_stock_product_to_the_cart(shop, products, step):
         shop.product.add_to_cart(1)           # waits for the AJAX /cart/add answer
     with step("Verify the cart has 1 item, total £55.00"):
         shop.cart.open_page()
-        expect_cart(shop.cart, 1, "£55.00")   # expect(header_cart_link) "My Cart (1)" + total
+        verify_cart_contents(shop.cart, 1, "£55.00")   # expect(header_cart_link) "My Cart (1)" + total
 ```
 
 | Unit 1 | Unit 2 |
 | --- | --- |
 | `self.wait.until(EC.url_contains("checkout"))` | `expect(page).to_have_url(re.compile("checkout"))` |
-| `assert cart.is_empty()` after a wait | `expect(cart.quantity_inputs).to_have_count(0)` |
+| `assert cart.is_empty()` after a wait | `expect(cart.quantity_boxes).to_have_count(0)` |
 | `assert error_text().strip()` | `expect(shop.login.error).to_be_visible()` |
 
 #### Test layout: test data, then numbered steps
@@ -197,7 +198,7 @@ class ProductPage(BasePage):
     _add_form = "form[action*='/cart/add']"
 ```
 
-Both rules are framework tests (`tests/unit/test_tests_read_as_steps.py`, `tests/unit/test_page_objects_layout.py`): a test without steps or a page method without a docstring fails the run.
+Both rules are part of the review checklist (Day 8, B4).
 
 ### 6. Isolation check
 
@@ -209,7 +210,7 @@ Both rules are framework tests (`tests/unit/test_tests_read_as_steps.py`, `tests
 cd ATEST03-unit2
 pip install -r requirements.txt
 playwright install chromium
-pytest --collect-only -q          # 28 browser tests (22 in the default run) + 37 framework tests
+pytest --collect-only -q          # 28 browser tests (22 in the default run) + 14 API tests
 pytest -m smoke                   # same smoke markers as Unit 1's tags
 pytest --headed --slowmo 300      # watch it run
 ```
@@ -265,7 +266,7 @@ def block_third_party(request, context: BrowserContext, base_url: str):
     store_host = urlparse(base_url).hostname
 
     def handle(route):
-        if _is_allowed(route.request.url, store_host):
+        if _is_allowed_host(route.request.url, store_host):
             route.continue_()
         else:
             blocked.append(route.request.url)
@@ -291,10 +292,43 @@ Network tests carry a risk marker and a requirement marker like every other test
 ```python
 page.route("**/cart/add*", lambda route: route.fulfill(status=500, body="Internal Server Error"))
 shop.product.open_product_page(products["Noir jacket"]["path-name"])
-shop.product.add_button.click()
+shop.product.add_to_cart_button.click()
 page.unroute("**/cart/add*")
 shop.cart.open_page()
-expect(shop.cart.quantity_inputs).to_have_count(0)
+expect(shop.cart.quantity_boxes).to_have_count(0)
+```
+
+### 2b. API testing (`tests/test_api.py`)
+
+The store's pages call a JSON API (the Shopify AJAX API). Testing it directly is fast (14 tests in about 10 s), needs no rendering and shows what the server itself allows. `api/store_api.py` holds the calls, laid out like a page object: methods under `####` banners, endpoints at the bottom of the class.
+
+| `StoreApi` method | Endpoint |
+| --- | --- |
+| `request_product(path_name)` | `GET /products/<path-name>.js` |
+| `add_product_to_cart(path_name, quantity)` | `POST /cart/add.js` |
+| `get_cart()` | `GET /cart.js` |
+| `change_cart_line_quantity(line, quantity)` | `POST /cart/change.js` |
+| `search_product_titles(keyword)` | `GET /search/suggest.json` |
+
+| Fixture | Request context | Used for |
+| --- | --- | --- |
+| `store_api` | its own (`playwright.request.new_context`): no browser, its own cart | pure API tests |
+| `store_api_in_browser` | the page's (`page.context.request`): shares the browser's cookies | API for the set-up, browser for the check |
+
+| Test | Checks | Requirement |
+| --- | --- | --- |
+| `test_product_api_returns_the_catalog_name_price_and_stock` (×7) | title, price in pence, `available` = `dataset/products.json` | REQ-04 |
+| `test_unknown_product_returns_404` | 404 for a product that does not exist | REQ-04 |
+| `test_cart_api_adds_the_product_and_totals_the_price` | 2 × Noir jacket → 2 items, 12000 pence | REQ-01 |
+| `test_cart_api_removes_a_line_set_to_zero` | line → quantity 0 → empty cart | REQ-02 |
+| `test_cart_api_refuses_a_sold_out_product` | **xfail, finding A1** | REQ-04 |
+| `test_search_api_suggests_matching_products` / `…_nothing_for_an_unknown_keyword` | suggestions for "jacket" / none for "zzqqxx" | REQ-08 |
+| `test_cart_prepared_through_the_api_shows_in_the_browser` | cart filled by the API shows on the cart page | REQ-01 |
+
+**Finding A1:** Brown Shades is sold out (`"available": false`, the product page shows a disabled "Sold Out" button), but `POST /cart/add.js` still adds it (HTTP 200, the cart holds 1 item). The UI test passes; only the API test sees it. The test states the expected behaviour (the add is refused) and is marked `xfail(strict=True)` with the finding: the report lists it as a known defect, and when the store is fixed the test passes and `strict` makes the run fail, so the marker is removed.
+
+```bash
+pytest -m api          # the API tests only (no browser except the last test)
 ```
 
 ### 3. Authentication state
@@ -303,7 +337,7 @@ Unit 1 typed credentials in every scenario that needed a login. Unit 2 logs in o
 
 ```python
 @pytest.fixture(scope="session")
-def customer_state(browser: Browser, base_url: str) -> Path:
+def saved_login_state(browser: Browser, base_url: str) -> Path:
     email, password = os.getenv("SAUCE_EMAIL"), os.getenv("SAUCE_PASSWORD")
     if not (email and password):
         pytest.skip("Set SAUCE_EMAIL and SAUCE_PASSWORD to run @auth tests")
@@ -352,7 +386,7 @@ Every test carries one requirement marker (`@pytest.mark.add_to_cart` …): `pyt
 
 1. What does a trace show that a screenshot cannot?
 2. Why is `block_third_party` autouse, and how does a test opt out?
-3. Why must `customer_state` be session-scoped, and why must `.auth/` stay out of git?
+3. Why must `saved_login_state` be session-scoped, and why must `.auth/` stay out of git?
 4. Why is `pytest -n auto` safe for this suite?
 
 ---
@@ -367,10 +401,10 @@ The lab automates the Unit 1 risk priorities on Playwright: 22 browser tests in 
 
 | Priority | Workflow | Risk | Tests | Unit 2 technique |
 | --- | --- | --- | --- | --- |
-| P1 | Add to cart, totals, change, remove | R01 Critical (20) | 5 tests in `test_cart.py` + 3 network tests | `cart_with` fixture, `expect_request`, 500 fault injection |
+| P1 | Add to cart, totals, change, remove | R01 Critical (20) | 5 tests in `test_cart.py` + 3 network tests | `add_product_and_open_cart` fixture, `expect_request`, 500 fault injection |
 | P1 | Cart → checkout | R02 Critical (15) | 1 test in `test_checkout.py` | `expect(page).to_have_url` |
 | P1 | Product detail, sold-out | R03 High (12) | 2 tests in `test_catalog.py` | `//*[@itemprop='name']`, `to_be_disabled()` |
-| P1 | Login, password reset, saved session | R04 High (12) | password reset + 2 auth tests; 2 invalid-login tests are `manual` (CAPTCHA) | `customer_state` storage state |
+| P1 | Login, password reset, saved session | R04 High (12) | password reset + 2 auth tests; 2 invalid-login tests are `manual` (CAPTCHA) | `saved_login_state` storage state |
 | P1 | Catalog prices and stock | R05 High (12) | 7 parametrized cases (one per product) + slow-network test | `parametrize`, CDP throttling |
 | P2 | Registration validation | R06 Medium (9) | 1 `manual` test (CAPTCHA) + 1 `data_creating` test | — |
 | P2 | Search | R07 Medium (9) | 2 tests in `test_search.py` | no-results message |
@@ -405,8 +439,8 @@ pytest -m "critical and not negative"
 
 | Check | Result |
 | --- | --- |
-| `pytest` | 59 passed (22 browser + 37 framework), 6 deselected (`auth` ×2, `manual` ×3, `data_creating` ×1) |
-| `pytest -n auto` | 59 passed |
+| `pytest` | 35 passed (22 browser + 13 API), 1 xfailed (finding A1), 6 deselected (`auth` ×2, `manual` ×3, `data_creating` ×1) |
+| `pytest -n auto` | 35 passed, 1 xfailed |
 | `pytest -m auth` (with an account) | 2 passed |
 | Failed test | `test-results/<test>/trace.zip`, screenshot, video |
 
@@ -525,7 +559,7 @@ Select-String -Path tests\*.py -Pattern ':nth-child|nth=|\.nth\('               
 - [ ] Every requirement REQ-01 … REQ-08 has a test: `pytest -m <requirement> --collect-only -q`
 - [ ] Tests read like the requirement: actions and checks through page objects, no URL or CSS in tests
 - [ ] No locator outside `pages/`
-- [ ] Every test has a docstring, `# Test data`, then only `with step(...)` blocks; every page method has a docstring under a `# Scope:` banner (framework tests)
+- [ ] Every test has a docstring, `# Test data`, then only `with step(...)` blocks; every page method has a docstring under a `# Scope:` banner (review)
 - [ ] No fixed waits, no `force=True` (B3 searches return nothing)
 - [ ] 0 flaky tests in 3 consecutive runs (B2)
 - [ ] Every failure leaves a trace, screenshot and video
@@ -537,5 +571,5 @@ Select-String -Path tests\*.py -Pattern ':nth-child|nth=|\.nth\('               
 | Check | Result on the mock store |
 | --- | --- |
 | B3 searches | no matches |
-| 3 runs of `pytest` | 59 passed each time, 0 flaky |
+| 3 runs of `pytest` | 35 passed + 1 xfailed each time, 0 flaky |
 | Forced failure | `trace.zip`, `test-failed-1.png`, `video.webm` in `test-results/` |

@@ -16,8 +16,8 @@ def test_search_returns_matching_products(shop, step):
     with step(f"Search for '{keyword}'"):
         shop.home.search_for(keyword)
     with step("Verify Grey jacket and Noir jacket are in the results"):
-        expect(shop.search.result_links.filter(has_text="Grey jacket").first).to_be_visible()
-        expect(shop.search.result_links.filter(has_text="Noir jacket").first).to_be_visible()
+        expect(shop.search.search_result_links.filter(has_text="Grey jacket").first).to_be_visible()
+        expect(shop.search.search_result_links.filter(has_text="Noir jacket").first).to_be_visible()
 
 
 @pytest.mark.negative
@@ -33,4 +33,4 @@ def test_search_with_no_matching_products(shop, step):
         shop.home.search_for(keyword)
     with step("Verify 'No results found' is shown and no product is listed"):
         expect(shop.search.no_results_message).to_be_visible()
-        expect(shop.search.result_links).to_have_count(0)
+        expect(shop.search.search_result_links).to_have_count(0)

@@ -11,7 +11,7 @@ class RegisterPage(BasePage):
     # Registration methods
     # Scope: Account > Create account form
     ############################################################################
-    def register(self, first: str, last: str, email: str, password: str):
+    def register_account(self, first: str, last: str, email: str, password: str):
         """Fill in the four fields, click Create and wait for the next page."""
         for field, value in (("first_name", first), ("last_name", last), ("email", email)):
             self.type_text(self._field.format(field), value)

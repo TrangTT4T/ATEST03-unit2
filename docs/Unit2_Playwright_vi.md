@@ -20,14 +20,15 @@ ATEST03-unit2/
 ├── requirements.txt
 ├── dataset/products.json        # cùng dữ liệu test với Unit 1
 ├── .env.example                 # danh sách biến tài khoản; chép thành .env (git bỏ qua .env nên không bao giờ bị push)
+├── api/                         # API object: StoreApi (Shopify AJAX API), endpoint khai ở cuối class
 ├── pages/                       # Page Object Playwright (chuyển từ Unit 1): mỗi file một class
 └── tests/
     ├── conftest.py              # fixture: dữ liệu, cô lập, kiểm soát network, đăng nhập
     ├── test_cart.py  test_checkout.py  test_catalog.py
     ├── test_login.py test_register.py  test_search.py   # mỗi khu vực một file, mỗi yêu cầu một marker
     ├── test_network.py          # chặn request, kiểm tra request, giả lập lỗi, mạng chậm
-    ├── test_auth_state.py       # phiên đăng nhập đã lưu + kiểm tra cô lập
-    └── unit/                    # quy tắc của framework: cấu trúc page object và test, method của BasePage (HTML cục bộ)
+    ├── test_api.py              # API JSON của store (api/store_api.py)
+    └── test_auth_state.py       # phiên đăng nhập đã lưu + kiểm tra cô lập
 helper_utility/helpers.py        # class Helper: by_locator() = locator string -> Playwright selector
 helper_utility/steps.py          # fixture `step`: bước đánh số -> bước Allure + nhóm trong trace
 ```
@@ -86,7 +87,7 @@ Locator là chuỗi XPath trơn mô tả element, gom dưới comment ghi khu v�
     # --- Locators -------------------------------------------------------------
     # Cart table (inside #cart; the hidden mini-cart drawer repeats every row)
     _cart_form = "//*[@id='cart']"
-    _quantity_inputs = "//*[@id='cart']//input[starts-with(@name,'updates')]"
+    _quantity_boxes = "//*[@id='cart']//input[starts-with(@name,'updates')]"
     # Cart buttons
     _update_button = "//*[@id='update']"
     _checkout_button = "//*[@id='checkout']"
@@ -115,7 +116,7 @@ Page không gọi `self.page`: page gọi các method của `BasePage`. Các met
 
 Không method nào trả về page để gọi nối tiếp: mở trang rồi dùng, viết hai dòng. Chỉ giữ method mà page hoặc test có dùng.
 
-`tests/unit/test_page_objects_layout.py` làm lần chạy fail nếu có locator mà `Helper.by_locator()` không nhận, có `self.page` ngoài `BasePage`, hoặc có code nằm ngoài class page; `tests/unit/test_base_page_methods.py` chạy từng prefix locator và các method trong Chromium với HTML cục bộ (không cần mạng).
+Các quy tắc bố cục này được kiểm trong review (Day 8, checklist B4): locator mà `Helper.by_locator()` không nhận sẽ làm test đầu tiên dùng nó fail, kèm locator trong thông báo.
 
 ### 4. Fixture (`tests/conftest.py`)
 
@@ -126,14 +127,14 @@ Không method nào trả về page để gọi nối tiếp: mở trang rồi d�
 | `products` | session | `before_all` đọc JSON | Đọc `dataset/products.json` |
 | `accounts` | session | — | Tài khoản theo tên (`unknown-user`, `new-customer` …) dựng từ `.env`; git bỏ qua `.env` nên không email hay mật khẩu nào lên GitHub. Thiếu biến thì các test tài khoản được bỏ qua, kèm tên biến |
 | `shop` | test | `Helper.create_page_object()` | Mọi Page Object gắn với page của test |
-| `cart_with` | test | code của step Given | Factory: `cart_with("Noir jacket", 2)` |
+| `add_product_and_open_cart` | test | code của step Given | Factory: `add_product_and_open_cart("Noir jacket", 2)` |
 | `block_third_party` | test, autouse | — | Kiểm soát network (Day 6) |
-| `customer_state` | session | — | Lưu trạng thái đăng nhập (Day 6) |
+| `saved_login_state` | session | — | Lưu trạng thái đăng nhập (Day 6) |
 
 ```python
 @pytest.fixture
-def cart_with(shop, products):
-    """Factory fixture: cart_with("Noir jacket", 2) puts 2 Noir jackets in this test's cart."""
+def add_product_and_open_cart(shop, products):
+    """Factory fixture: add_product_and_open_cart("Noir jacket", 2) puts 2 Noir jackets in this test's cart."""
     def _add(name: str, quantity: int = 1):
         shop.product.open_product_page(products[name]["path-name"])
         shop.product.add_to_cart(quantity)
@@ -162,13 +163,13 @@ def test_add_an_in_stock_product_to_the_cart(shop, products, step):
         shop.product.add_to_cart(1)           # chờ response AJAX của /cart/add
     with step("Verify the cart has 1 item, total £55.00"):
         shop.cart.open_page()
-        expect_cart(shop.cart, 1, "£55.00")   # expect(header_cart_link) "My Cart (1)" + total
+        verify_cart_contents(shop.cart, 1, "£55.00")   # expect(header_cart_link) "My Cart (1)" + total
 ```
 
 | Unit 1 | Unit 2 |
 | --- | --- |
 | `self.wait.until(EC.url_contains("checkout"))` | `expect(page).to_have_url(re.compile("checkout"))` |
-| `assert cart.is_empty()` sau khi wait | `expect(cart.quantity_inputs).to_have_count(0)` |
+| `assert cart.is_empty()` sau khi wait | `expect(cart.quantity_boxes).to_have_count(0)` |
 | `assert error_text().strip()` | `expect(shop.login.error).to_be_visible()` |
 
 #### Cấu trúc một test: dữ liệu test, rồi các bước được đánh số
@@ -197,7 +198,7 @@ class ProductPage(BasePage):
     _add_form = "form[action*='/cart/add']"
 ```
 
-Hai quy tắc này là test framework (`tests/unit/test_tests_read_as_steps.py`, `tests/unit/test_page_objects_layout.py`): test thiếu step hoặc method page thiếu docstring sẽ làm lần chạy fail.
+Hai quy tắc này nằm trong checklist review (Day 8, B4).
 
 ### 6. Kiểm tra tính cô lập
 
@@ -209,7 +210,7 @@ Hai quy tắc này là test framework (`tests/unit/test_tests_read_as_steps.py`,
 cd ATEST03-unit2
 pip install -r requirements.txt
 playwright install chromium
-pytest --collect-only -q          # 28 test trình duyệt (22 chạy mặc định) + 37 test framework
+pytest --collect-only -q          # 28 test trình duyệt (22 chạy mặc định) + 14 test API
 pytest -m smoke                   # cùng tag smoke như Unit 1
 pytest --headed --slowmo 300      # xem trình duyệt chạy
 ```
@@ -265,7 +266,7 @@ def block_third_party(request, context: BrowserContext, base_url: str):
     store_host = urlparse(base_url).hostname
 
     def handle(route):
-        if _is_allowed(route.request.url, store_host):
+        if _is_allowed_host(route.request.url, store_host):
             route.continue_()
         else:
             blocked.append(route.request.url)
@@ -291,10 +292,43 @@ Test network cũng mang marker rủi ro và marker yêu cầu như mọi test kh
 ```python
 page.route("**/cart/add*", lambda route: route.fulfill(status=500, body="Internal Server Error"))
 shop.product.open_product_page(products["Noir jacket"]["path-name"])
-shop.product.add_button.click()
+shop.product.add_to_cart_button.click()
 page.unroute("**/cart/add*")
 shop.cart.open_page()
-expect(shop.cart.quantity_inputs).to_have_count(0)
+expect(shop.cart.quantity_boxes).to_have_count(0)
+```
+
+### 2b. Test API (`tests/test_api.py`)
+
+Các trang của store gọi một API JSON (Shopify AJAX API). Test thẳng API thì nhanh (14 test, khoảng 10 giây), không cần vẽ giao diện, và cho thấy chính server cho phép những gì. `api/store_api.py` chứa các lời gọi, bố cục giống page object: method gom dưới banner `####`, endpoint khai ở cuối class.
+
+| Method của `StoreApi` | Endpoint |
+| --- | --- |
+| `request_product(path_name)` | `GET /products/<path-name>.js` |
+| `add_product_to_cart(path_name, quantity)` | `POST /cart/add.js` |
+| `get_cart()` | `GET /cart.js` |
+| `change_cart_line_quantity(line, quantity)` | `POST /cart/change.js` |
+| `search_product_titles(keyword)` | `GET /search/suggest.json` |
+
+| Fixture | Request context | Dùng cho |
+| --- | --- | --- |
+| `store_api` | riêng (`playwright.request.new_context`): không trình duyệt, giỏ riêng | test API thuần |
+| `store_api_in_browser` | của page (`page.context.request`): dùng chung cookie với trình duyệt | API để chuẩn bị, trình duyệt để kiểm tra |
+
+| Test | Kiểm tra | Yêu cầu |
+| --- | --- | --- |
+| `test_product_api_returns_the_catalog_name_price_and_stock` (×7) | tên, giá (pence), `available` khớp `dataset/products.json` | REQ-04 |
+| `test_unknown_product_returns_404` | 404 cho sản phẩm không tồn tại | REQ-04 |
+| `test_cart_api_adds_the_product_and_totals_the_price` | 2 × Noir jacket → 2 món, 12000 pence | REQ-01 |
+| `test_cart_api_removes_a_line_set_to_zero` | dòng → số lượng 0 → giỏ trống | REQ-02 |
+| `test_cart_api_refuses_a_sold_out_product` | **xfail, phát hiện A1** | REQ-04 |
+| `test_search_api_suggests_matching_products` / `…_nothing_for_an_unknown_keyword` | gợi ý cho "jacket" / không có gì cho "zzqqxx" | REQ-08 |
+| `test_cart_prepared_through_the_api_shows_in_the_browser` | giỏ thêm bằng API hiện trên trang giỏ | REQ-01 |
+
+**Phát hiện A1:** Brown Shades đang hết hàng (`"available": false`, trang sản phẩm hiện nút "Sold Out" bị khoá), nhưng `POST /cart/add.js` vẫn thêm được (HTTP 200, giỏ có 1 món). Test giao diện pass; chỉ test API thấy lỗi này. Test ghi hành vi đúng (phải bị từ chối) và được đánh dấu `xfail(strict=True)` kèm mô tả: báo cáo liệt kê nó là lỗi đã biết, và khi store sửa xong thì test pass, `strict` làm lần chạy fail để nhắc bỏ marker.
+
+```bash
+pytest -m api          # chỉ chạy test API (không mở trình duyệt, trừ test cuối)
 ```
 
 ### 3. Lưu trạng thái đăng nhập
@@ -303,7 +337,7 @@ Unit 1 gõ thông tin đăng nhập ở mọi scenario cần đăng nhập. Unit
 
 ```python
 @pytest.fixture(scope="session")
-def customer_state(browser: Browser, base_url: str) -> Path:
+def saved_login_state(browser: Browser, base_url: str) -> Path:
     email, password = os.getenv("SAUCE_EMAIL"), os.getenv("SAUCE_PASSWORD")
     if not (email and password):
         pytest.skip("Set SAUCE_EMAIL and SAUCE_PASSWORD to run @auth tests")
@@ -352,7 +386,7 @@ Test nào cũng mang một marker yêu cầu (`@pytest.mark.add_to_cart` …): `
 
 1. Trace cho thấy những gì mà ảnh chụp không cho thấy?
 2. Vì sao `block_third_party` là autouse, và test muốn bỏ qua thì làm thế nào?
-3. Vì sao `customer_state` phải có scope session, và vì sao `.auth/` không được đưa lên git?
+3. Vì sao `saved_login_state` phải có scope session, và vì sao `.auth/` không được đưa lên git?
 4. Vì sao chạy `pytest -n auto` an toàn với bộ test này?
 
 ---
@@ -367,10 +401,10 @@ Bài lab tự động hóa các ưu tiên rủi ro của Unit 1 trên Playwright
 
 | Ưu tiên | Luồng | Risk | Test | Kỹ thuật Unit 2 |
 | --- | --- | --- | --- | --- |
-| P1 | Thêm vào giỏ, tổng tiền, đổi, xóa | R01 Critical (20) | 5 test trong `test_cart.py` + 3 test network | fixture `cart_with`, `expect_request`, giả lập lỗi 500 |
+| P1 | Thêm vào giỏ, tổng tiền, đổi, xóa | R01 Critical (20) | 5 test trong `test_cart.py` + 3 test network | fixture `add_product_and_open_cart`, `expect_request`, giả lập lỗi 500 |
 | P1 | Giỏ hàng → checkout | R02 Critical (15) | 1 test trong `test_checkout.py` | `expect(page).to_have_url` |
 | P1 | Trang chi tiết, hàng hết | R03 High (12) | 2 test trong `test_catalog.py` | `//*[@itemprop='name']`, `to_be_disabled()` |
-| P1 | Đăng nhập, reset mật khẩu, phiên đã lưu | R04 High (12) | reset mật khẩu + 2 test auth; 2 test đăng nhập sai là `manual` (CAPTCHA) | storage state `customer_state` |
+| P1 | Đăng nhập, reset mật khẩu, phiên đã lưu | R04 High (12) | reset mật khẩu + 2 test auth; 2 test đăng nhập sai là `manual` (CAPTCHA) | storage state `saved_login_state` |
 | P1 | Giá và tình trạng trên catalog | R05 High (12) | 7 trường hợp parametrize (mỗi sản phẩm một) + test mạng chậm | `parametrize`, giới hạn băng thông qua CDP |
 | P2 | Kiểm tra lỗi đăng ký | R06 Medium (9) | 1 test `manual` (CAPTCHA) + 1 test `data_creating` | — |
 | P2 | Tìm kiếm | R07 Medium (9) | 2 test trong `test_search.py` | thông báo không có kết quả |
@@ -405,8 +439,8 @@ pytest -m "critical and not negative"
 
 | Kiểm tra | Kết quả |
 | --- | --- |
-| `pytest` | 59 pass (22 trình duyệt + 37 framework), 6 bị lọc (`auth` ×2, `manual` ×3, `data_creating` ×1) |
-| `pytest -n auto` | 59 pass |
+| `pytest` | 35 pass (22 trình duyệt + 13 API), 1 xfailed (phát hiện A1), 6 bị lọc (`auth` ×2, `manual` ×3, `data_creating` ×1) |
+| `pytest -n auto` | 35 pass, 1 xfailed |
 | `pytest -m auth` (có tài khoản) | 2 pass |
 | Test fail | `test-results/<test>/trace.zip`, ảnh, video |
 
@@ -525,7 +559,7 @@ Select-String -Path tests\*.py -Pattern ':nth-child|nth=|\.nth\('               
 - [ ] Yêu cầu REQ-01 … REQ-08 nào cũng có test: `pytest -m <yêu_cầu> --collect-only -q`
 - [ ] Test đọc giống yêu cầu: thao tác và kiểm tra qua page object, không URL hay CSS trong test
 - [ ] Không có locator ngoài `pages/`
-- [ ] Test nào cũng có docstring, `# Test data`, rồi chỉ các khối `with step(...)`; method page nào cũng có docstring dưới banner `# Scope:` (test framework)
+- [ ] Test nào cũng có docstring, `# Test data`, rồi chỉ các khối `with step(...)`; method page nào cũng có docstring dưới banner `# Scope:` (review)
 - [ ] Không chờ cố định, không `force=True` (lệnh tìm ở B3 không ra kết quả)
 - [ ] 0 test flaky trong 3 lần chạy liên tiếp (B2)
 - [ ] Mỗi lần fail đều có trace, ảnh và video
@@ -537,5 +571,5 @@ Select-String -Path tests\*.py -Pattern ':nth-child|nth=|\.nth\('               
 | Kiểm tra | Kết quả trên site giả lập |
 | --- | --- |
 | Lệnh tìm ở B3 | không có kết quả |
-| 3 lần chạy `pytest` | mỗi lần 59 pass, 0 flaky |
+| 3 lần chạy `pytest` | mỗi lần 35 pass + 1 xfailed, 0 flaky |
 | Cố ý làm fail | `trace.zip`, `test-failed-1.png`, `video.webm` trong `test-results/` |

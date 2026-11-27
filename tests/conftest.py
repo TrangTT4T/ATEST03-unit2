@@ -9,10 +9,12 @@ Fixture map (Day 5-6):
   browser (session) -> context (one per test: isolation) -> page (one per test)
   products           test data from dataset/products.json
   accounts           test accounts from .env (never committed; see .env.example)
-  block_third_party  autouse network control: only the store and Shopify hosts are reached
+  block_third_party  autouse network control: only the store and Shopify hosts are reached (browser tests only)
   shop               Page Objects bound to this test's page
-  cart_with          factory fixture: put N of a product in the cart
-  customer_state     login once, reuse the saved storage state (auth)
+  add_product_and_open_cart   factory fixture: put N of a product in the cart, then open the cart page
+  store_api          StoreApi on its own API context (no browser): products, cart, search
+  store_api_in_browser        StoreApi that shares the browser's cookies: an API call changes the page's cart
+  saved_login_state  login once, reuse the saved storage state (auth)
   step               numbered test steps: Allure step + trace group (helper_utility/steps.py)
 """
 import json
@@ -24,8 +26,9 @@ from urllib.parse import urlparse
 
 import pytest
 from dotenv import load_dotenv
-from playwright.sync_api import Browser, BrowserContext, Page
+from playwright.sync_api import Browser, Page, Playwright
 
+from api import StoreApi
 from helper_utility.steps import Steps
 from pages import BasePage, CartPage, CatalogPage, CheckoutPage, LoginPage, ProductPage, RegisterPage, SearchPage
 
@@ -89,7 +92,7 @@ def browser_context_args(browser_context_args):
 
 
 # --- network control (Day 6-7) --------------------------------------------------
-def _is_allowed(url: str, store_host: str) -> bool:
+def _is_allowed_host(url: str, store_host: str) -> bool:
     host = urlparse(url).hostname or ""
     if urlparse(url).scheme in ("data", "blob"):
         return True
@@ -97,26 +100,28 @@ def _is_allowed(url: str, store_host: str) -> bool:
 
 
 @pytest.fixture(autouse=True)
-def block_third_party(request, context: BrowserContext, base_url: str):
+def block_third_party(request, base_url: str):
     """Abort requests to third-party hosts (social widgets, analytics, Sauce app).
 
     Removes the main source of flakiness that the store does not own.
-    Opt out with @pytest.mark.allow_third_party. Yields the list of blocked URLs.
+    Opt out with @pytest.mark.allow_third_party. A test without a browser page (an API test) has
+    nothing to block, and must not start a browser for it. Yields the list of blocked URLs.
     """
     blocked: list[str] = []
-    if request.node.get_closest_marker("allow_third_party"):
+    if request.node.get_closest_marker("allow_third_party") or "page" not in request.fixturenames:
         yield blocked
         return
+    context = request.getfixturevalue("context")
     store_host = urlparse(base_url).hostname
 
-    def handle(route):
-        if _is_allowed(route.request.url, store_host):
+    def abort_third_party_request(route):
+        if _is_allowed_host(route.request.url, store_host):
             route.continue_()
         else:
             blocked.append(route.request.url)
             route.abort()
 
-    context.route("**/*", handle)
+    context.route("**/*", abort_third_party_request)
     yield blocked
 
 
@@ -129,14 +134,30 @@ def shop(page: Page) -> SimpleNamespace:
 
 
 @pytest.fixture
-def cart_with(shop, products):
-    """Factory fixture: cart_with("Noir jacket", 2) puts 2 Noir jackets in this test's cart."""
-    def _add(name: str, quantity: int = 1):
+def add_product_and_open_cart(shop, products):
+    """Factory fixture: add_product_and_open_cart("Noir jacket", 2) puts 2 Noir jackets in this test's
+    cart, opens the cart page and returns it."""
+    def add_and_open_cart(name: str, quantity: int = 1):
         shop.product.open_product_page(products[name]["path-name"])
         shop.product.add_to_cart(quantity)
         shop.cart.open_page()
         return shop.cart
-    return _add
+    return add_and_open_cart
+
+
+# --- API objects (Day 6: API testing) ---------------------------------------------
+@pytest.fixture
+def store_api(playwright: Playwright, base_url: str):
+    """StoreApi on its own API request context: no browser, its own cart (one per test)."""
+    request_context = playwright.request.new_context(base_url=base_url)
+    yield StoreApi(request_context)
+    request_context.dispose()
+
+
+@pytest.fixture
+def store_api_in_browser(page: Page) -> StoreApi:
+    """StoreApi that shares the browser's cookies: what it adds to the cart, the page's cart shows."""
+    return StoreApi(page.context.request)
 
 
 # --- test steps ---------------------------------------------------------------
@@ -149,7 +170,7 @@ def step(request) -> Steps:
 
 # --- authentication state (Day 6) ------------------------------------------------
 @pytest.fixture(scope="session")
-def customer_state(browser: Browser, base_url: str) -> Path:
+def saved_login_state(browser: Browser, base_url: str) -> Path:
     """Log in once per session and save cookies/localStorage; tests reuse the file."""
     email, password = os.getenv("SAUCE_EMAIL"), os.getenv("SAUCE_PASSWORD")
     if not (email and password):
