@@ -14,9 +14,9 @@ pytestmark = pytest.mark.critical
 
 def expect_cart(cart: CartPage, items: int, total: str) -> None:
     """The cart holds ``items`` items in all and its total is ``total`` (e.g. "£55.00")."""
-    expect(cart.mini_cart).to_have_text(re.compile(rf"My Cart \({items}\)"))  # retries until updated
-    assert cart.total_quantity() == items
-    assert cart.total() == BasePage.money_to_float(total)
+    expect(cart.header_cart_link).to_have_text(re.compile(rf"My Cart \({items}\)"))  # retries until updated
+    assert cart.count_items_in_cart() == items
+    assert cart.get_cart_total() == BasePage.money_to_float(total)
 
 
 @pytest.mark.smoke
@@ -28,11 +28,12 @@ def test_add_an_in_stock_product_to_the_cart(shop, products, step):
 
     # Execution steps
     with step("Open the product page of Grey jacket"):
-        shop.product.open_product(grey_jacket["path-name"])
+        shop.product.open_product_page(grey_jacket["path-name"])
     with step("Add 1 item to the cart"):
         shop.product.add_to_cart(1)
     with step("Verify the cart has 1 item, total £55.00"):
-        expect_cart(shop.cart.open(), 1, "£55.00")
+        shop.cart.open_page()
+        expect_cart(shop.cart, 1, "£55.00")
 
 
 @pytest.mark.regression
@@ -59,7 +60,7 @@ def test_change_the_quantity_of_a_product_in_the_cart(cart_with, step):
     with step("Put 1 x Bronze sandals in the cart"):
         cart = cart_with("Bronze sandals", 1)
     with step("Change the quantity of Bronze sandals to 2"):
-        cart.set_quantity("Bronze sandals", 2)
+        cart.change_quantity("Bronze sandals", 2)
     with step("Verify the cart has 2 items, total £79.98"):
         expect_cart(cart, 2, "£79.98")
 
@@ -72,6 +73,6 @@ def test_remove_the_only_product_from_the_cart(cart_with, step):
     with step("Put 1 x Striped top in the cart"):
         cart = cart_with("Striped top", 1)
     with step("Remove Striped top from the cart"):
-        cart.remove("Striped top")
+        cart.remove_product_from_cart("Striped top")
     with step("Verify the cart has no lines left"):
         expect(cart.quantity_inputs).to_have_count(0)

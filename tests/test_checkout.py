@@ -15,7 +15,7 @@ def test_checkout_opens_from_a_non_empty_cart(shop, page, cart_with, step):
     with step("Put 1 x Grey jacket in the cart"):
         cart = cart_with("Grey jacket", 1)
     with step("Start checkout from the cart"):
-        cart.checkout()
+        cart.click_checkout()
     with step("Verify the checkout page lists Grey jacket"):
         expect(page).to_have_url(shop.checkout.URL)
-        expect(shop.checkout.line_item("Grey jacket")).to_be_visible()
+        expect(shop.checkout.order_summary_line("Grey jacket")).to_be_visible()

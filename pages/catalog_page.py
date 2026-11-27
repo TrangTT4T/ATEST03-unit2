@@ -11,9 +11,10 @@ class CatalogPage(BasePage):
     # Product tile methods
     # Scope: Catalog > All products
     ############################################################################
-    def tile(self, path_name: str) -> Locator:
+    def product_tile(self, path_name: str) -> Locator:
         """The tile of one product (its "path-name" in dataset/products.json): name, price and "Sold Out"."""
-        return self.find_element(self.locator(self._tile, path_name=path_name), first=True)
+        return self.find_element(self._tile.format(path_name))
 
     # --- Locators -------------------------------------------------------------
-    _tile = "css=a[href*='/products/{path_name}']"  # the tile links to the product page
+    # Product tiles: each tile links to its product page. .format(path_name)
+    _tile = "//a[contains(@href,'/products/{}')]"

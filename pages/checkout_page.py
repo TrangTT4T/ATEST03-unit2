@@ -13,9 +13,10 @@ class CheckoutPage(BasePage):
     # Order summary methods
     # Scope: Checkout > Order summary
     ############################################################################
-    def line_item(self, product_name: str) -> Locator:
+    def order_summary_line(self, product_name: str) -> Locator:
         """The order-summary line of ``product_name``."""
-        return self.find_element(self.locator(self._line_item, name=product_name), first=True)
+        return self.find_element(self._line_item.format(product_name))
 
     # --- Locators -------------------------------------------------------------
-    _line_item = "text={name}"
+    # Order summary: the element whose own text names the product. .format(product_name)
+    _line_item = "//*[text()[contains(normalize-space(),'{}')]]"

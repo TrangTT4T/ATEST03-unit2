@@ -16,12 +16,11 @@ HTML = """
 <a href="/account/recover">Forgot your password?</a>
 <div class="errors" style="display:none">Wrong password</div>
 <p id="total">£50.00</p>
-<h1 data-testid="title">Grey jacket</h1>
+<h1>Grey jacket</h1>
 <ul><li class="row">Noir jacket <input name="qty" value="1"></li>
     <li class="row">Grey jacket <input name="qty" value="2"></li></ul>
-<button id="buy" disabled>Sold Out</button>
-<button id="later" disabled>Add to Cart</button>
-<script>setTimeout(() => { document.getElementById('later').disabled = false; }, 300);</script>
+<button id="later" style="display:none">Add to Cart</button>
+<script>setTimeout(() => { document.getElementById('later').style.display = 'inline'; }, 300);</script>
 """
 
 
@@ -34,54 +33,54 @@ def base(page):
 
 
 @pytest.mark.parametrize("locator, text", [
-    ("css=#total", "£50.00"),
+    ("//p[@id='total']", "£50.00"),  # plain XPath: what every page writes
+    ("(//li)[2]", "Grey jacket"),
     ("xpath=//p[@id='total']", "£50.00"),
     ("id=total", "£50.00"),
-    ("tag=h1", "Grey jacket"),
-    ("data-testid=title", "Grey jacket"),
-    ("text=Wrong password", "Wrong password"),
-    ("class=errors", "Wrong password"),
+    ("id:total", "£50.00"),
+    ("css=#total", "£50.00"),
+    ("tag_name=h1", "Grey jacket"),
+    ("class_name=errors", "Wrong password"),
     ("link=Forgot your password?", "Forgot your password?"),
-    ("partial_link=your password?", "Forgot your password?"),
-    ("role=button[name='Sold Out']", "Sold Out"),
+    ("partial link=your password", "Forgot your password?"),
 ])
 def test_every_locator_prefix_finds_its_element(base, locator, text):
-    assert base.find_element(locator).text_content() == text
+    assert base.find_element(locator).text_content().strip() == text
 
 
-def test_locators_chain_and_scope_to_a_locator(base):
-    grey_row = base.find_element("css=li.row").filter(has_text="Grey jacket")
-    assert base.get_input_value(grey_row, "name=qty") == "2"
-    assert base.count_elements("css=ul", "name=qty") == 2
-    assert not base.is_element_present("css=#missing")
+def test_name_prefix_finds_the_input(base):
+    base.type_text("name=q", "jacket")
+    assert base.find_element("//input[@name='q']").input_value() == "jacket"
+
+
+@pytest.mark.parametrize("bad, message", [
+    ("", "A locator is a non-empty string"),
+    ("foo=bar", "prefix 'foo' is not supported: 'foo=bar'"),
+    ("nmae=q", "prefix 'nmae' is not supported: 'nmae=q'"),  # a typo fails here, not later as XPath
+])
+def test_bad_locators_fail_with_the_locator_in_the_message(base, bad, message):
+    with pytest.raises(ValueError, match=message):
+        base.find_element(bad)
+
+
+def test_find_elements_returns_every_match(base):
+    assert base.find_elements("//li[@class='row']").count() == 2
+    assert base.find_elements("//*[@id='missing']").count() == 0
 
 
 def test_type_text_fills_and_never_logs_a_secret(base, caplog):
     with caplog.at_level(logging.INFO, logger="BasePage"):
-        base.type_text("name=q", text="jacket")
-        base.type_text("name=password", text="Passw0rd!2026", secret=True)
-    assert base.get_input_value("name=q") == "jacket"
-    assert base.get_input_value("name=password") == "Passw0rd!2026"
+        base.type_text("//input[@name='q']", "jacket")
+        base.type_text("//input[@name='password']", "Passw0rd!2026", secret=True)
+    assert base.find_element("//input[@name='password']").input_value() == "Passw0rd!2026"
     assert "Passw0rd" not in caplog.text
     assert "'***'" in caplog.text and "'jacket'" in caplog.text
 
 
-def test_state_checks_answer_now_or_wait_for_the_state(base):
+def test_is_element_visible_answers_now_or_waits_for_the_state(base):
     start = time.monotonic()
-    assert base.is_element_visible("id=total")
-    assert not base.is_element_visible("class=errors")
-    assert not base.is_element_enabled("id=buy")
-    assert not base.is_element_enabled("id=missing")  # missing: False, not an exception
+    assert base.is_element_visible("//p[@id='total']")
+    assert not base.is_element_visible("//div[@class='errors']")
+    assert not base.is_element_visible("//*[@id='missing']")
     assert time.monotonic() - start < 1
-    assert base.is_element_enabled("id=later", timeout=3)  # enabled by the page after 0.3 s
-
-
-def test_checks_pass_or_fail_with_a_readable_message(base):
-    base.element_should_be_visible("id=total")
-    base.element_should_be_disabled("id=buy")
-    base.element_should_contain_text("id=total", text="£50.00")
-    base.element_should_have_count("css=li.row", count=2)
-    with pytest.raises(AssertionError, match="Element 'class=errors' is not visible"):
-        base.element_should_be_visible("class=errors")
-    with pytest.raises(AssertionError, match="The total must be £55.00"):
-        base.element_should_contain_text("id=total", text="£55.00", error_msg="The total must be £55.00")
+    assert base.is_element_visible("//*[@id='later']", timeout=3)  # shown by the page after 0.3 s

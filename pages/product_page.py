@@ -11,17 +11,17 @@ class ProductPage(BasePage):
     # Product detail methods
     # Scope: Product page > Name, price, stock
     ############################################################################
-    def open_product(self, path_name: str):
+    def open_product_page(self, path_name: str):
         """Open /products/<path_name>; ``path_name`` comes from dataset/products.json, e.g. "grey-jacket"."""
-        return self.open(self.URL_TEMPLATE.format(path_name=path_name))
+        self.open_page(self.URL_TEMPLATE.format(path_name=path_name))
 
     @property
-    def title(self) -> Locator:
+    def product_name(self) -> Locator:
         """The product name."""
         return self.find_element(self._title)
 
     @property
-    def price(self) -> Locator:
+    def product_price(self) -> Locator:
         """The product price."""
         return self.find_element(self._price)
 
@@ -35,19 +35,14 @@ class ProductPage(BasePage):
     # Scope: Product page > Add to cart form
     ############################################################################
     @property
-    def add_form(self) -> Locator:
-        """The add-to-cart form."""
-        return self.find_element(self._add_form, first=True)
-
-    @property
     def add_button(self) -> Locator:
         """The Add to Cart button."""
-        return self.find_element(self.add_form, self._add_button, first=True)
+        return self.find_element(self._add_button)
 
     def add_to_cart(self, quantity: int = 1):
         """Add ``quantity`` items and wait until the store has answered every add."""
-        if self.is_element_visible(self._add_form, self._quantity):
-            self.type_text(self._add_form, self._quantity, text=str(quantity))
+        if self.is_element_visible(self._quantity):
+            self.type_text(self._quantity, str(quantity))
             self._click_add()
         else:  # theme without a visible quantity box: add the product N times
             for _ in range(quantity):
@@ -59,16 +54,15 @@ class ProductPage(BasePage):
         Wait for the server's answer to THIS click (Day 6: network-aware waits). A navigation or
         load-state wait would hang or return at once - neither proves that the add finished.
         """
-        answer = self.click_and_wait_for_response(self.add_form, self._add_button, url_part="/cart/add")
+        answer = self.click_and_wait_for_response(self._add_button, url_part="/cart/add")
         if not answer.ok:
             raise AssertionError(f"add to cart failed: HTTP {answer.status}")
 
     # --- Locators -------------------------------------------------------------
-    # itemprop="name" (schema.org markup) is the product name; the shop's first <h1> is its logo.
-    _title = "css=[itemprop='name']"
-    _price = "id=product-price"
-    _sold_out_button = "role=button[name='Sold Out']"
-    _add_form = "css=form[action*='/cart/add']"  # standard Shopify form
-    # Inside the add form:
-    _add_button = "css=[type='submit']"
-    _quantity = "name=quantity"
+    # Product details. itemprop="name" (schema.org) is the name; the first <h1> is the shop logo.
+    _title = "//*[@itemprop='name']"
+    _price = "//*[@id='product-price']"
+    _sold_out_button = "//input[@type='submit' and @value='Sold Out']"
+    # Add to cart form (standard Shopify)
+    _add_button = "//form[contains(@action,'/cart/add')]//*[@type='submit']"
+    _quantity = "//form[contains(@action,'/cart/add')]//input[@name='quantity']"

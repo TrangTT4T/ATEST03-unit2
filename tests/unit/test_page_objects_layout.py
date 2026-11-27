@@ -5,7 +5,7 @@
 * its methods are grouped under ``####`` banners, each naming its area with ``# Scope: ...``;
 * every public method and property has a docstring;
 * its locators are declared at the BOTTOM of the class, after the last method, as locator STRINGS
-  that parse_locator() accepts ("css=...", "xpath=...", "role=...", "name=q", "link=..." ...);
+  that Helper.by_locator() accepts (plain XPath such as "//*[@id='cart']", or "id=...", "name=..." ...);
 * methods never write a selector inline (no string literal passed to locator(), no get_by_*());
 * only BasePage talks to the Playwright page (``self.page``): every other page uses the BasePage
   methods (find_element, click_element, type_text, click_and_wait_for_new_page ...).
@@ -16,7 +16,7 @@ from pathlib import Path
 
 import pytest
 
-from pages import BasePage
+from helper_utility.helpers import Helper
 
 BANNER = re.compile(r"^\s*#{20,}\n\s*# .+\n\s*# Scope: .+\n\s*#{20,}$", re.MULTILINE)
 PAGES = sorted(p for p in (Path(__file__).resolve().parents[2] / "pages").glob("*.py") if p.name != "__init__.py")
@@ -51,7 +51,7 @@ def layout_problems(source: str, is_base_page: bool = False) -> list[str]:
                 problems.append(f"line {node.lineno}: a locator is a string such as 'css=...'")
             else:
                 try:
-                    BasePage.parse_locator(node.value.value)
+                    Helper().by_locator(node.value.value)
                 except ValueError as error:
                     problems.append(f"line {node.lineno}: {error}")
         for method in methods:

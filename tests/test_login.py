@@ -23,11 +23,11 @@ def test_login_is_rejected_with_invalid_credentials(shop, page, step, email, pas
     """Invalid credentials show an error and do not open the account page."""
     # Execution steps
     with step("Open the login page"):
-        shop.login.open()
+        shop.login.open_page()
     with step(f"Log in as '{email}' with a wrong password"):
         shop.login.login(email, password)
     with step("Verify an error is shown and the account page is not opened"):
-        expect(shop.login.error).to_be_visible()
+        expect(shop.login.error_message).to_be_visible()
         expect(page).not_to_have_url(re.compile(r"/account/?$"))
 
 
@@ -36,8 +36,8 @@ def test_customer_opens_the_password_reset_form(shop, step):
     """'Forgot your password?' opens the password-reset form."""
     # Execution steps
     with step("Open the login page"):
-        shop.login.open()
+        shop.login.open_page()
     with step("Choose 'Forgot your password?'"):
-        shop.login.open_password_reset()
+        shop.login.click_forgot_password()
     with step("Verify the password-reset form is shown"):
-        expect(shop.login.reset_form).to_be_visible()
+        expect(shop.login.password_reset_form).to_be_visible()

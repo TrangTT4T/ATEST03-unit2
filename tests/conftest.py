@@ -106,9 +106,10 @@ def shop(page: Page) -> SimpleNamespace:
 def cart_with(shop, products):
     """Factory fixture: cart_with("Noir jacket", 2) puts 2 Noir jackets in this test's cart."""
     def _add(name: str, quantity: int = 1):
-        shop.product.open_product(products[name]["path-name"])
+        shop.product.open_product_page(products[name]["path-name"])
         shop.product.add_to_cart(quantity)
-        return shop.cart.open()
+        shop.cart.open_page()
+        return shop.cart
     return _add
 
 
@@ -129,7 +130,8 @@ def customer_state(browser: Browser, base_url: str) -> Path:
         pytest.skip("Set SAUCE_EMAIL and SAUCE_PASSWORD to run @auth tests")
     context = browser.new_context(base_url=base_url)
     page = context.new_page()
-    login = LoginPage(page).open()
+    login = LoginPage(page)
+    login.open_page()
     login.login(email, password)
     page.wait_for_url("**/account**")
     AUTH_FILE.parent.mkdir(exist_ok=True)

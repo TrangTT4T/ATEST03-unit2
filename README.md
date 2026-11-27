@@ -11,7 +11,7 @@ Unit 2 is **plain Playwright**: tests are pytest functions that drive page objec
 | Requirements REQ-01 … REQ-08 and their risks | Every test carries one requirement marker, e.g. `@pytest.mark.add_to_cart` (declared in `pytest.ini`) |
 | Gherkin tags `@critical` `@smoke` `@negative` | pytest markers with the same names, declared in `pytest.ini` (`--strict-markers`) |
 | `dataset/products.json` | Same file: each product's `path-name` is the last part of its page address (`/products/<path-name>`), never derived from the name (Black heels is `flower-print-jeans`) |
-| Page Object pattern, one class per file, locator strings (`css=`, `xpath=`, `name=` …) at the bottom, custom BasePage methods | Same layout and locator syntax; BasePage methods on Playwright's auto-waiting |
+| Page Object pattern, one class per file, plain XPath locators at the bottom, `Helper.by_locator`, custom BasePage methods | Same layout, locators and helper; BasePage methods on Playwright's auto-waiting |
 | Hooks in `environment.py` | Fixtures in `tests/conftest.py` |
 | Screenshot on failure | Trace + screenshot + video on failure |
 | — | Network interception, fault injection, throttling, saved auth state, parallel runs, flaky reruns |
@@ -30,7 +30,7 @@ ATEST03-unit2/
 ├── dataset/
 │   └── products.json            # Unit 1 test data
 ├── pages/                       # Page Objects: one class per file, locator strings at the bottom;
-│                                #   BasePage = parse_locator(), money_to_float() + click/type/wait/check methods
+│                                #   BasePage = find_element(s), click/type/wait methods, money_to_float()
 ├── tests/
 │   ├── conftest.py              # fixtures, network control, auth state
 │   ├── test_cart.py             # @add_to_cart, @update_cart        (Critical)
@@ -42,6 +42,7 @@ ATEST03-unit2/
 │   ├── test_network.py          # interception, fault injection, throttling
 │   ├── test_auth_state.py       # saved login (needs a real account)
 │   └── unit/                    # framework rules: page-object and test layout, BasePage methods (local HTML)
+├── helper_utility/helpers.py    # class Helper: by_locator() = locator string -> Playwright selector
 ├── helper_utility/steps.py      # the `step` fixture: numbered steps -> Allure step + trace group
 └── docs/Unit2_Playwright_vi.md, Unit2_Playwright_en.md
 ```
@@ -53,7 +54,7 @@ Requires **Python 3.12**: the version in `.python-version` (PyCharm, VS Code, py
 ```bash
 pip install -r requirements.txt
 playwright install chromium
-pytest                               # 22 browser tests + 34 framework tests; manual/data_creating/auth excluded
+pytest                               # 22 browser tests + 37 framework tests; manual/data_creating/auth excluded
 pytest -m smoke
 pytest -m critical                   # every Critical-risk test
 pytest -m add_to_cart                # every test of one requirement
@@ -65,7 +66,7 @@ playwright show-trace test-results/<test>/trace.zip
 
 ## Page objects
 
-Locators are strings with a strategy prefix, the same syntax as Unit 1: `"css=#cart"`, `"xpath=//h1"`, `"role=button[name='Sold Out']"`, `"name=q"`, `"link=Forgot your password?"`, declared at the bottom of each page class. `BasePage.parse_locator()` turns them into Playwright selectors. Pages never touch `self.page`: they call the `BasePage` methods (`find_element`, `click_element`, `type_text`, `click_and_wait_for_response`, `is_element_enabled`, `element_should_be_disabled` …), which log the action and fail with the locator's name. A page file holds only imports and its one class: helpers such as `parse_locator` and `money_to_float` are `BasePage` methods (a framework test enforces it). Details: Day 5 section 3 of the unit document.
+Locators are plain XPath strings that describe the element (`"//*[@id='cart']"`, `"//*[@itemprop='name']"`, `"//a[normalize-space()='Forgot your password?']"`), declared at the bottom of each page class under a comment naming the area of the page; a template uses `{}` and `.format()`. `Helper.by_locator()` (`helper_utility/helpers.py`, the same prefixes as Unit 1) turns them into Playwright selectors. Pages never touch `self.page`: they call the `BasePage` methods (`find_element`, `find_elements`, `click_element`, `type_text`, `click_and_wait_for_response` …), which log the action. No method returns the page for chaining. Details: Day 5 section 3 of the unit document.
 
 ## How a test reads
 
@@ -81,11 +82,12 @@ def test_add_an_in_stock_product_to_the_cart(shop, products, step):
 
     # Execution steps
     with step("Open the product page of Grey jacket"):
-        shop.product.open_product(grey_jacket["path-name"])
+        shop.product.open_product_page(grey_jacket["path-name"])
     with step("Add 1 item to the cart"):
         shop.product.add_to_cart(1)
     with step("Verify the cart has 1 item, total £55.00"):
-        expect_cart(shop.cart.open(), 1, "£55.00")
+        shop.cart.open_page()
+        expect_cart(shop.cart, 1, "£55.00")
 ```
 
 ## Reports

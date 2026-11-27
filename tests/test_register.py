@@ -22,11 +22,11 @@ def test_registration_is_rejected_without_an_email(shop, step):
 
     # Execution steps
     with step("Open the registration page"):
-        shop.register.open()
+        shop.register.open_page()
     with step("Register as Test User with no email"):
         shop.register.register("Test", "User", "", password)
     with step("Verify an error is shown"):
-        expect(shop.register.error).to_be_visible()
+        expect(shop.register.error_message).to_be_visible()
 
 
 @pytest.mark.data_creating
@@ -38,7 +38,7 @@ def test_registration_succeeds_with_valid_details(shop, page, step):
 
     # Execution steps
     with step("Open the registration page"):
-        shop.register.open()
+        shop.register.open_page()
     with step("Register as Playwright Tester with a new email"):
         shop.register.register("Playwright", "Tester", email, password)
     with step("Verify the account page is opened"):

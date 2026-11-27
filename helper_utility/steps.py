@@ -1,7 +1,7 @@
 """Numbered test steps: every action or check of a test is one ``with step("..."):`` block.
 
     with step("Open the product page of Grey jacket"):
-        shop.product.open_product(grey_jacket["path-name"])
+        shop.product.open_product_page(grey_jacket["path-name"])
 
 Each block becomes:
 

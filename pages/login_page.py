@@ -11,41 +11,36 @@ class LoginPage(BasePage):
     # Login methods
     # Scope: Account > Login form
     ############################################################################
-    @property
-    def form(self) -> Locator:
-        """The login form."""
-        return self.find_element(self._form, first=True)
-
     def login(self, email: str, password: str):
         """Fill in email and password, click Sign In and wait for the next page."""
-        self.type_text(self._form, self._email, text=email)
-        self.type_text(self._form, self._password, text=password, secret=True)
-        self.click_and_wait_for_new_page(self._form, self._sign_in_button)
+        self.type_text(self._email, email)
+        self.type_text(self._password, password, secret=True)
+        self.click_and_wait_for_new_page(self._sign_in_button)
 
     @property
-    def error(self) -> Locator:
+    def error_message(self) -> Locator:
         """The form's error message (e.g. wrong password)."""
-        return self.find_element(self._errors, first=True)
+        return self.find_element(self._errors)
 
     ############################################################################
     # Password reset methods
     # Scope: Account > Login page > Forgot your password?
     ############################################################################
-    def open_password_reset(self):
+    def click_forgot_password(self):
         """Click "Forgot your password?" to show the password-reset form."""
         self.click_element(self._forgot_password_link)
 
     @property
-    def reset_form(self) -> Locator:
+    def password_reset_form(self) -> Locator:
         """The password-reset form."""
-        return self.find_element(self._reset_form, first=True)
+        return self.find_element(self._reset_form)
 
     # --- Locators -------------------------------------------------------------
-    _form = "css=form[action*='/account/login']"
-    # Inside the form:
-    _email = "name=customer[email]"
-    _password = "name=customer[password]"
-    _sign_in_button = "css=[type='submit']"
-    _errors = "css=.errors, .form-error, [role='alert']"
-    _forgot_password_link = "link=Forgot your password?"
-    _reset_form = "css=form[action*='/account/recover']"
+    # Login form
+    _email = "//form[contains(@action,'/account/login')]//input[@name='customer[email]']"
+    _password = "//form[contains(@action,'/account/login')]//input[@name='customer[password]']"
+    _sign_in_button = "//form[contains(@action,'/account/login')]//*[@type='submit']"
+    _errors = "//*[contains(@class,'errors') or contains(@class,'form-error') or @role='alert']"
+    # Password reset
+    _forgot_password_link = "//a[normalize-space()='Forgot your password?']"
+    _reset_form = "//form[contains(@action,'/account/recover')]"

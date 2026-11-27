@@ -27,6 +27,7 @@ ATEST03-unit2/
     ├── test_network.py          # chặn request, kiểm tra request, giả lập lỗi, mạng chậm
     ├── test_auth_state.py       # phiên đăng nhập đã lưu + kiểm tra cô lập
     └── unit/                    # quy tắc của framework: cấu trúc page object và test, method của BasePage (HTML cục bộ)
+helper_utility/helpers.py        # class Helper: by_locator() = locator string -> Playwright selector
 helper_utility/steps.py          # fixture `step`: bước đánh số -> bước Allure + nhóm trong trace
 ```
 
@@ -67,39 +68,53 @@ Tạo context chỉ mất vài mili giây, nên mỗi test có giỏ hàng sạc
 
 ### 3. Locator
 
-| Ưu tiên | Locator | Ví dụ trong `pages/` |
+| Ưu tiên | Locator (XPath trơn) | Ví dụ trong `pages/` |
 | --- | --- | --- |
-| 1 | Role + tên hiển thị | `role=link[name=/My Cart \(\d+\)/]` (mini cart) |
-| 2 | Thuộc tính ngữ nghĩa | `css=[itemprop='name']` (tên sản phẩm: `<h1>` đầu tiên của trang là logo) |
-| 3 | Text | `text=No results found for` |
-| 4 | Thuộc tính ổn định / action của form | `css=form[action*='/cart/add']`, `css=input[name^='updates']`, `name=update` |
-| 5 | Locator có filter | dòng trong `#cart` `.filter(has=role=link[name='Striped top' s])`: giới hạn trong `#cart` vì trang nào cũng có mini-cart ẩn lặp lại các dòng đó |
-| Không dùng | Theo vị trí | `:nth-child`, `xpath=(//a)[3]` |
+| 1 | Id | `//*[@id='cart']`, `//*[@id='checkout']`, `//*[@id='product-price']` |
+| 2 | Thuộc tính ngữ nghĩa | `//*[@itemprop='name']` (tên sản phẩm: `<h1>` đầu tiên của trang là logo) |
+| 3 | Chữ | `//a[normalize-space()='Forgot your password?']`, `//*[contains(text(),'No results found for')]` |
+| 4 | Thuộc tính ổn định / action của form | `//form[contains(@action,'/cart/add')]//*[@type='submit']`, `//input[@type='submit' and @value='Sold Out']` |
+| 5 | Giới hạn trong phần tử cha | `//*[@id='cart']//input[starts-with(@name,'updates')]` — giới hạn trong `#cart` vì trang nào cũng có mini-cart ẩn lặp lại các dòng đó |
+| Không dùng | Theo vị trí | `(//a)[3]`, `//div[2]/a` |
 
-#### Locator dạng chuỗi và các method tự viết của BasePage
+#### Locator và các method tự viết của BasePage (cùng khung với Unit 1)
 
-Locator là chuỗi có tiền tố chiến lược, viết giống repo Unit 1 (Selenium). `BasePage.parse_locator()` đổi chúng thành selector của Playwright:
+Locator là chuỗi XPath trơn mô tả element, gom dưới comment ghi khu vực của trang; template dùng `{}` và `.format()`:
 
-| Chuỗi locator | Selector Playwright |
+```python
+    # --- Locators -------------------------------------------------------------
+    # Cart table (inside #cart; the hidden mini-cart drawer repeats every row)
+    _cart_form = "//*[@id='cart']"
+    _quantity_inputs = "//*[@id='cart']//input[starts-with(@name,'updates')]"
+    # Cart buttons
+    _update_button = "//*[@id='update']"
+    _checkout_button = "//*[@id='checkout']"
+```
+
+`Helper.by_locator()` (`helper_utility/helpers.py`, cùng bộ prefix với Unit 1) đổi locator thành selector của Playwright:
+
+| Locator | Selector Playwright |
 | --- | --- |
-| `css=#cart`, `xpath=//h1`, `text=...`, `role=...`, `id=product-price`, `data-testid=...` | giữ nguyên (engine có sẵn của Playwright) |
-| `name=q` | `css=[name='q']` |
-| `tag=html`, `class=errors` | `css=html`, `css=.errors` |
-| `link=Forgot your password?` | `role=link[name='Forgot your password?' s]` (khớp đúng) |
-| `partial_link=password` | `role=link[name=/password/]` (chứa, phân biệt hoa thường như Selenium) |
-| `//h1` / `input[name='q']` (không tiền tố) | `xpath=//h1` / `css=input[name='q']` |
+| `//*[@id='cart']` (không prefix: cách các page đang viết) | `xpath=//*[@id='cart']` |
+| `id=cart` hoặc `id:cart` | `id=cart` |
+| `name=q` | `xpath=//*[@name='q']` |
+| `link=Forgot your password?` / `partial link=password` | `xpath=//a[normalize-space()='…']` / `xpath=//a[contains(normalize-space(),'…')]` |
+| `css=#cart`, `tag_name=h1`, `class_name=errors`, `xpath=//h1` | `css=#cart`, `css=h1`, `css=.errors`, `xpath=//h1` |
+| `foo=bar` | `ValueError: Element locator with prefix 'foo' is not supported: 'foo=bar'` |
 
-Page không gọi `self.page`: page truyền chuỗi locator cho các method của `BasePage`. Các method này ghi log thao tác (hiện trong báo cáo của test fail, mật khẩu ghi là `***`) và báo lỗi có tên locator:
+Page không gọi `self.page`: page gọi các method của `BasePage`. Các method này ghi log thao tác (hiện trong báo cáo của test fail, mật khẩu ghi là `***`):
 
 | Nhóm | Method |
 | --- | --- |
-| Điều hướng | `open(path)`, `url`, `wait_for_url_contains(fragment)` |
-| Locator | `locator(template, **values)`, `find_element(*locators, first=False)` (nối chuỗi: `find_element(self._root, self._update_button)`; phần tử đầu có thể là một Locator làm phạm vi), `count_elements`, `is_element_present` |
-| Thao tác | `click_element`, `click_and_wait_for_new_page` (nút submit form), `click_and_wait_for_response(..., url_part=)` (AJAX), `type_text(..., text=, secret=False)`, `press_enter` |
-| Đọc và trạng thái | `get_text`, `get_input_value`, `is_element_visible(..., timeout=0)`, `is_element_enabled(..., timeout=0)` — chờ trạng thái tối đa `timeout` giây, không ngủ cố định |
-| Kiểm tra (`expect()`, raise `AssertionError`) | `element_should_be_visible`, `element_should_be_disabled`, `element_should_contain_text`, `element_should_have_count` — đều nhận `error_msg` tùy chọn |
+| Điều hướng | `open_page(path)`, `wait_until_url_contains(fragment)` |
+| Locator | `find_element(locator)` (phần tử đầu), `find_elements(locator)` (mọi phần tử) — locator của Playwright, lười: chờ khi có thao tác hoặc `expect()` dùng tới |
+| Thao tác | `click_element`, `click_and_wait_for_new_page` (nút submit form), `click_and_wait_for_response(locator, url_part=)` (AJAX), `type_text(locator, text, secret=False)` |
+| Trạng thái | `is_element_visible(locator, timeout=0)` — chờ trạng thái tối đa `timeout` giây, không ngủ cố định |
+| Header | `header_cart_link`, `search_for(keyword)` |
 
-`tests/unit/test_page_objects_layout.py` làm lần chạy fail nếu có locator mà `BasePage.parse_locator()` không nhận, có `self.page` ngoài `BasePage`, hoặc có code nằm ngoài class page (hàm phụ như `money_to_float` là method của `BasePage`); `tests/unit/test_base_page_methods.py` chạy từng tiền tố locator và các method trong Chromium với HTML cục bộ (không cần mạng).
+Không method nào trả về page để gọi nối tiếp: mở trang rồi dùng, viết hai dòng. Chỉ giữ method mà page hoặc test có dùng.
+
+`tests/unit/test_page_objects_layout.py` làm lần chạy fail nếu có locator mà `Helper.by_locator()` không nhận, có `self.page` ngoài `BasePage`, hoặc có code nằm ngoài class page; `tests/unit/test_base_page_methods.py` chạy từng prefix locator và các method trong Chromium với HTML cục bộ (không cần mạng).
 
 ### 4. Fixture (`tests/conftest.py`)
 
@@ -108,7 +123,7 @@ Page không gọi `self.page`: page truyền chuỗi locator cho các method c�
 | `browser`, `context`, `page` | session / test / test | `before_scenario` + `after_scenario` | pytest-playwright cung cấp |
 | `browser_context_args` | session | option trong `_make_driver()` | Viewport 1366×900, locale en-GB |
 | `products` | session | `before_all` đọc JSON | Đọc `dataset/products.json` |
-| `shop` | test | `helper_utility/helpers.page()` | Mọi Page Object gắn với page của test |
+| `shop` | test | `Helper.create_page_object()` | Mọi Page Object gắn với page của test |
 | `cart_with` | test | code của step Given | Factory: `cart_with("Noir jacket", 2)` |
 | `block_third_party` | test, autouse | — | Kiểm soát network (Day 6) |
 | `customer_state` | session | — | Lưu trạng thái đăng nhập (Day 6) |
@@ -118,9 +133,10 @@ Page không gọi `self.page`: page truyền chuỗi locator cho các method c�
 def cart_with(shop, products):
     """Factory fixture: cart_with("Noir jacket", 2) puts 2 Noir jackets in this test's cart."""
     def _add(name: str, quantity: int = 1):
-        shop.product.open_product(products[name]["path-name"])
+        shop.product.open_product_page(products[name]["path-name"])
         shop.product.add_to_cart(quantity)
-        return shop.cart.open()
+        shop.cart.open_page()
+        return shop.cart
     return _add
 ```
 
@@ -139,11 +155,12 @@ def test_add_an_in_stock_product_to_the_cart(shop, products, step):
 
     # Execution steps
     with step("Open the product page of Grey jacket"):
-        shop.product.open_product(grey_jacket["path-name"])
+        shop.product.open_product_page(grey_jacket["path-name"])
     with step("Add 1 item to the cart"):
         shop.product.add_to_cart(1)           # chờ response AJAX của /cart/add
     with step("Verify the cart has 1 item, total £55.00"):
-        expect_cart(shop.cart.open(), 1, "£55.00")   # expect(mini_cart) "My Cart (1)" + total
+        shop.cart.open_page()
+        expect_cart(shop.cart, 1, "£55.00")   # expect(header_cart_link) "My Cart (1)" + total
 ```
 
 | Unit 1 | Unit 2 |
@@ -190,7 +207,7 @@ Hai quy tắc này là test framework (`tests/unit/test_tests_read_as_steps.py`,
 cd ATEST03-unit2
 pip install -r requirements.txt
 playwright install chromium
-pytest --collect-only -q          # 28 test trình duyệt (22 chạy mặc định) + 34 test framework
+pytest --collect-only -q          # 28 test trình duyệt (22 chạy mặc định) + 37 test framework
 pytest -m smoke                   # cùng tag smoke như Unit 1
 pytest --headed --slowmo 300      # xem trình duyệt chạy
 ```
@@ -271,10 +288,11 @@ Test network cũng mang marker rủi ro và marker yêu cầu như mọi test kh
 
 ```python
 page.route("**/cart/add*", lambda route: route.fulfill(status=500, body="Internal Server Error"))
-shop.product.open_product(products["Noir jacket"]["path-name"])
+shop.product.open_product_page(products["Noir jacket"]["path-name"])
 shop.product.add_button.click()
 page.unroute("**/cart/add*")
-expect(shop.cart.open().quantity_inputs).to_have_count(0)
+shop.cart.open_page()
+expect(shop.cart.quantity_inputs).to_have_count(0)
 ```
 
 ### 3. Lưu trạng thái đăng nhập
@@ -289,7 +307,8 @@ def customer_state(browser: Browser, base_url: str) -> Path:
         pytest.skip("Set SAUCE_EMAIL and SAUCE_PASSWORD to run @auth tests")
     context = browser.new_context(base_url=base_url)
     page = context.new_page()
-    login = LoginPage(page).open()
+    login = LoginPage(page)
+    login.open_page()
     login.login(email, password)
     page.wait_for_url("**/account**")
     AUTH_FILE.parent.mkdir(exist_ok=True)
@@ -348,7 +367,7 @@ Bài lab tự động hóa các ưu tiên rủi ro của Unit 1 trên Playwright
 | --- | --- | --- | --- | --- |
 | P1 | Thêm vào giỏ, tổng tiền, đổi, xóa | R01 Critical (20) | 5 test trong `test_cart.py` + 3 test network | fixture `cart_with`, `expect_request`, giả lập lỗi 500 |
 | P1 | Giỏ hàng → checkout | R02 Critical (15) | 1 test trong `test_checkout.py` | `expect(page).to_have_url` |
-| P1 | Trang chi tiết, hàng hết | R03 High (12) | 2 test trong `test_catalog.py` | `css=[itemprop='name']`, `to_be_disabled()` |
+| P1 | Trang chi tiết, hàng hết | R03 High (12) | 2 test trong `test_catalog.py` | `//*[@itemprop='name']`, `to_be_disabled()` |
 | P1 | Đăng nhập, reset mật khẩu, phiên đã lưu | R04 High (12) | reset mật khẩu + 2 test auth; 2 test đăng nhập sai là `manual` (CAPTCHA) | storage state `customer_state` |
 | P1 | Giá và tình trạng trên catalog | R05 High (12) | 7 trường hợp parametrize (mỗi sản phẩm một) + test mạng chậm | `parametrize`, giới hạn băng thông qua CDP |
 | P2 | Kiểm tra lỗi đăng ký | R06 Medium (9) | 1 test `manual` (CAPTCHA) + 1 test `data_creating` | — |
@@ -384,8 +403,8 @@ pytest -m "critical and not negative"
 
 | Kiểm tra | Kết quả |
 | --- | --- |
-| `pytest` | 56 pass (22 trình duyệt + 34 framework), 6 bị lọc (`auth` ×2, `manual` ×3, `data_creating` ×1) |
-| `pytest -n auto` | 56 pass |
+| `pytest` | 59 pass (22 trình duyệt + 37 framework), 6 bị lọc (`auth` ×2, `manual` ×3, `data_creating` ×1) |
+| `pytest -n auto` | 59 pass |
 | `pytest -m auth` (có tài khoản) | 2 pass |
 | Test fail | `test-results/<test>/trace.zip`, ảnh, video |
 
@@ -516,5 +535,5 @@ Select-String -Path tests\*.py -Pattern ':nth-child|nth=|\.nth\('               
 | Kiểm tra | Kết quả trên site giả lập |
 | --- | --- |
 | Lệnh tìm ở B3 | không có kết quả |
-| 3 lần chạy `pytest` | mỗi lần 56 pass, 0 flaky |
+| 3 lần chạy `pytest` | mỗi lần 59 pass, 0 flaky |
 | Cố ý làm fail | `trace.zip`, `test-failed-1.png`, `video.webm` trong `test-results/` |
