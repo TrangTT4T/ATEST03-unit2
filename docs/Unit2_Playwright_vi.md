@@ -19,6 +19,7 @@ ATEST03-unit2/
 ├── pytest.ini                   # base_url, tracing, báo cáo, marker (--strict-markers)
 ├── requirements.txt
 ├── dataset/products.json        # cùng dữ liệu test với Unit 1
+├── .env.example                 # danh sách biến tài khoản; chép thành .env (git bỏ qua .env nên không bao giờ bị push)
 ├── pages/                       # Page Object Playwright (chuyển từ Unit 1): mỗi file một class
 └── tests/
     ├── conftest.py              # fixture: dữ liệu, cô lập, kiểm soát network, đăng nhập
@@ -123,6 +124,7 @@ Không method nào trả về page để gọi nối tiếp: mở trang rồi d�
 | `browser`, `context`, `page` | session / test / test | `before_scenario` + `after_scenario` | pytest-playwright cung cấp |
 | `browser_context_args` | session | option trong `_make_driver()` | Viewport 1366×900, locale en-GB |
 | `products` | session | `before_all` đọc JSON | Đọc `dataset/products.json` |
+| `accounts` | session | — | Tài khoản theo tên (`unknown-user`, `new-customer` …) dựng từ `.env`; git bỏ qua `.env` nên không email hay mật khẩu nào lên GitHub. Thiếu biến thì các test tài khoản được bỏ qua, kèm tên biến |
 | `shop` | test | `Helper.create_page_object()` | Mọi Page Object gắn với page của test |
 | `cart_with` | test | code của step Given | Factory: `cart_with("Noir jacket", 2)` |
 | `block_third_party` | test, autouse | — | Kiểm soát network (Day 6) |

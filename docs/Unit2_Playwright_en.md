@@ -19,6 +19,7 @@ ATEST03-unit2/
 ├── pytest.ini                   # base_url, tracing, reports, markers (--strict-markers)
 ├── requirements.txt
 ├── dataset/products.json        # same test data as Unit 1
+├── .env.example                 # account variables; copy to .env (git ignores .env, so it is never pushed)
 ├── pages/                       # Playwright Page Objects (ported from Unit 1): one class per file
 └── tests/
     ├── conftest.py              # fixtures: data, isolation, network control, auth state
@@ -123,6 +124,7 @@ No method returns the page for chaining: open a page, then use it, on two lines.
 | `browser`, `context`, `page` | session / test / test | `before_scenario` + `after_scenario` | Provided by pytest-playwright |
 | `browser_context_args` | session | `_make_driver()` options | Viewport 1366×900, locale en-GB |
 | `products` | session | `before_all` loading JSON | Reads `dataset/products.json` |
+| `accounts` | session | — | Test accounts by name (`unknown-user`, `new-customer` …) built from `.env`; git ignores `.env`, so no email or password ever goes to GitHub. A missing variable skips the account tests and names it |
 | `shop` | test | `Helper.create_page_object()` | All Page Objects bound to this test's page |
 | `cart_with` | test | `Given ... in the cart` step | Factory: `cart_with("Noir jacket", 2)` |
 | `block_third_party` | test, autouse | — | Network control (Day 6) |

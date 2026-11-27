@@ -8,6 +8,7 @@ Gherkin tags, network control, tracing, auth state, xdist.
 Fixture map (Day 5-6):
   browser (session) -> context (one per test: isolation) -> page (one per test)
   products           test data from dataset/products.json
+  accounts           test accounts from .env (never committed; see .env.example)
   block_third_party  autouse network control: only the store and Shopify hosts are reached
   shop               Page Objects bound to this test's page
   cart_with          factory fixture: put N of a product in the cart
@@ -22,6 +23,7 @@ from types import SimpleNamespace
 from urllib.parse import urlparse
 
 import pytest
+from dotenv import load_dotenv
 from playwright.sync_api import Browser, BrowserContext, Page
 
 from helper_utility.steps import Steps
@@ -30,6 +32,7 @@ from pages import BasePage, CartPage, CatalogPage, CheckoutPage, LoginPage, Prod
 ROOT = Path(__file__).resolve().parent.parent
 DATASET = ROOT / "dataset"  # same file as the ATEST03-unit1 repo: dataset/products.json
 AUTH_FILE = ROOT / ".auth" / "customer.json"
+load_dotenv(ROOT / ".env")  # account data and the real login live in .env, which git ignores
 SHOPIFY_SUFFIXES = (".shopify.com", ".myshopify.com", ".shopifycdn.com", ".shopifycloud.com", ".shopifysvc.com")
 # Third-party hosts the THEME needs to work. The shop loads jQuery from Google's CDN; blocked, the
 # product page never renders its "Sold Out" button (found 2026-11-25). Tracking hosts stay blocked.
@@ -53,6 +56,29 @@ def pytest_configure(config):
 def products() -> dict:
     with open(DATASET / "products.json", encoding="utf-8") as fh:
         return json.load(fh)["products"]
+
+
+@pytest.fixture(scope="session")
+def accounts() -> dict:
+    """Test accounts by name, read from .env (git ignores it; .env.example lists the variables).
+
+    No email or password is written in a file that goes to GitHub. A test that needs a value
+    missing from .env is skipped and the message names the variables to set.
+    """
+    needed = ["TEST_PASSWORD", "WRONG_PASSWORD", "UNKNOWN_USER_EMAIL", "MALFORMED_EMAIL",
+              "NEW_CUSTOMER_FIRST_NAME", "NEW_CUSTOMER_LAST_NAME", "NEW_CUSTOMER_EMAIL"]
+    missing = [name for name in needed if not os.getenv(name)]
+    if missing:
+        pytest.skip(f"Set {', '.join(missing)} in .env (see .env.example) to run the account tests")
+    env = os.environ
+    return {
+        "new-customer": {"first_name": env["NEW_CUSTOMER_FIRST_NAME"], "last_name": env["NEW_CUSTOMER_LAST_NAME"],
+                         "email": env["NEW_CUSTOMER_EMAIL"], "password": env["TEST_PASSWORD"]},
+        "customer-without-email": {"first_name": env["NEW_CUSTOMER_FIRST_NAME"], "last_name": env["NEW_CUSTOMER_LAST_NAME"],
+                                   "email": "", "password": env["TEST_PASSWORD"]},
+        "unknown-user": {"email": env["UNKNOWN_USER_EMAIL"], "password": env["WRONG_PASSWORD"]},
+        "malformed-email": {"email": env["MALFORMED_EMAIL"], "password": env["WRONG_PASSWORD"]},
+    }
 
 
 # --- browser context (isolation) ------------------------------------------------

@@ -29,6 +29,7 @@ ATEST03-unit2/
 ├── requirements.txt
 ├── dataset/
 │   └── products.json            # Unit 1 test data
+├── .env.example                 # account variables to copy into .env (git ignores .env: never pushed)
 ├── pages/                       # Page Objects: one class per file, locator strings at the bottom;
 │                                #   BasePage = find_element(s), click/type/wait methods, money_to_float()
 ├── tests/
@@ -53,6 +54,7 @@ Requires **Python 3.12**: the version in `.python-version` (PyCharm, VS Code, py
 
 ```bash
 pip install -r requirements.txt
+cp .env.example .env                 # then fill in the account values (only for -m auth / manual / data_creating)
 playwright install chromium
 pytest                               # 22 browser tests + 37 framework tests; manual/data_creating/auth excluded
 pytest -m smoke

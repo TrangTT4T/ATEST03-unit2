@@ -14,18 +14,17 @@ pytestmark = [pytest.mark.high, pytest.mark.secure_login]
 
 @pytest.mark.manual
 @pytest.mark.negative
-@pytest.mark.parametrize(
-    "email, password",
-    [("not-a-user@example.com", "wrongpass1"), ("not-an-email", "wrongpass1")],
-    ids=["unknown-user", "malformed-email"],
-)
-def test_login_is_rejected_with_invalid_credentials(shop, page, step, email, password):
+@pytest.mark.parametrize("account_name", ["unknown-user", "malformed-email"])  # accounts come from .env
+def test_login_is_rejected_with_invalid_credentials(shop, page, accounts, step, account_name):
     """Invalid credentials show an error and do not open the account page."""
+    # Test data
+    account = accounts[account_name]
+
     # Execution steps
     with step("Open the login page"):
         shop.login.open_page()
-    with step(f"Log in as '{email}' with a wrong password"):
-        shop.login.login(email, password)
+    with step(f"Log in as '{account['email']}' with a wrong password"):
+        shop.login.login(account["email"], account["password"])
     with step("Verify an error is shown and the account page is not opened"):
         expect(shop.login.error_message).to_be_visible()
         expect(page).not_to_have_url(re.compile(r"/account/?$"))
