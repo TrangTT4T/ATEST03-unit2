@@ -1,41 +1,54 @@
-# Unit 2 – Playwright End-to-End Automation (Sauce Demo)
+# Unit 2 – Playwright End-to-End Automation (Swag Labs)
 
-pytest + Playwright (pytest-playwright) · Application under test: https://sauce-demo.myshopify.com · Code: `ATEST03-unit2/`
+pytest + Playwright (pytest-playwright) · Application under test: https://www.saucedemo.com (Swag Labs) · Code: `ATEST03-unit2/`
 
-Unit 2 is plain Playwright: it automates the same Unit 1 requirements, risks and test data as pytest tests that drive page objects, with no Gherkin layer (BDD is Unit 1's subject; BDD on top of Playwright is the mock project in Unit 5). The tests are built on Day 5, then gain tracing, network control, saved login and parallel runs (Day 6), are applied to the prioritised workflows in the lab (Day 7), and are made reliable with failure analysis and flaky-test control (Day 8). Everything runs with the `pytest` command.
+Unit 2 is plain Playwright: pytest tests that drive page objects, with no Gherkin layer (BDD is Unit 1's subject; BDD on top of Playwright is the mock project in Unit 5). The tests are built on Day 5, then gain tracing, saved login and parallel runs (Day 6), are applied to the prioritised workflows in the lab (Day 7), and are made reliable with failure analysis and flaky-test control (Day 8). Everything runs with the `pytest` command.
+
+Why Swag Labs: the first version of this unit tested the Shopify store of Unit 1 (sauce-demo.myshopify.com). Its Cloudflare protection and rate limit (HTTP 429, "Just a moment...") stopped the browser tests on some networks, and a bot check must never be bypassed. Swag Labs is a demo shop made for test automation: no bot protection, no rate limit, `data-test` attributes on its elements, demo accounts listed on its login page.
 
 | Day | Content | LO | Delivery | Minutes | Format |
 | --- | --- | --- | --- | --- | --- |
 | Day 5 | Playwright architecture, browser contexts, locators, fixtures, assertions, isolation | LO3 | Concept/Lecture | 120 | Virtual |
-| Day 6 | Tracing, network interception, authentication state, parallel execution, reporting patterns | LO3 | Concept/Lecture | 120 | Virtual |
-| Day 7 | Playwright implementation lab: prioritised end-to-end workflows with fixtures, tracing, network control | LO3 | Assignment/Lab | 150 | Hybrid |
+| Day 6 | Tracing, authentication state, parallel execution, reporting patterns | LO3 | Concept/Lecture | 120 | Virtual |
+| Day 7 | Playwright implementation lab: prioritised end-to-end workflows with fixtures and tracing | LO3 | Assignment/Lab | 150 | Hybrid |
 | Day 8 | Topic revision | LO3 | Guides/Review | 60 | Virtual |
 | Day 8 | Reliability and maintainability: failure analysis, flaky-test control, tracing diagnostics, stability | LO3 | Concept/Lecture | 120 | Virtual |
 
-Contents: Day 5 – Architecture · Day 6 – Tracing, network, auth, parallel · Day 7 – Lab · Day 8 – Revision + reliability
+Contents: Day 5 – Architecture · Day 6 – Tracing, auth, parallel · Day 7 – Lab · Day 8 – Revision + reliability
 
 ```text
 ATEST03-unit2/
 ├── pytest.ini                   # base_url, tracing, reports, markers (--strict-markers)
 ├── requirements.txt
+├── .env.example                 # SWAG_USERNAME, SWAG_LOCKED_OUT_USERNAME, SWAG_PASSWORD; copy to .env (git ignores it)
 ├── dataset/                     # test data, one JSON file per area (Helper.read_test_data("<area>"))
-│   ├── products.json            #   the 7 products: path-name, price, stock status, type, vendor, options
-│   ├── cart.json                #   add / change / remove cases with their expected totals
-│   └── search.json              #   matching keywords (upper case, part of a word ...) and keywords with no match
-├── .env.example                 # SAUCE_EMAIL / SAUCE_PASSWORD only (pytest -m auth); git ignores .env, so it is never pushed
-├── api/                         # API objects, one class per area like pages/: BaseApi, ProductApi, CartApi, SearchApi, AccountApi
-├── pages/                       # Playwright Page Objects (ported from Unit 1): one class per file
-└── tests/
-    ├── conftest.py              # shared: products, accounts (Faker), step, reports
-    ├── ui/                      # UI tests (browser + page objects); conftest: shop, network control, auth state
-    │   ├── test_cart.py  test_checkout.py  test_catalog.py
-    │   ├── test_login.py test_register.py  test_search.py   # one file per area, one marker per requirement
-    │   └── test_auth_state.py   # saved login + isolation check
-    └── api/                     # API tests (no browser); conftest: shop_api
-        └── test_product_api.py  test_cart_api.py  test_search_api.py
-helper_utility/helpers.py        # class Helper: by_locator() = locator string -> Playwright selector
-helper_utility/steps.py          # the `step` fixture: numbered steps -> Allure step + trace group
+│   ├── products.json            #   the 6 products: id, price, description
+│   ├── login.json               #   rejected logins and their errors
+│   ├── catalog.json             #   the 4 sort options
+│   ├── cart.json                #   add / remove cases
+│   └── checkout.json            #   overview totals (item total, tax, total), required fields and their errors
+├── pages/                       # Page Objects: one class per file, XPath locators at the bottom
+│   ├── base_page.py             #   BasePage: find_element(s), click/type/select, waits, header, side menu
+│   ├── login_page.py  inventory_page.py  product_page.py  cart_page.py
+│   └── checkout_information_page.py  checkout_overview_page.py  checkout_complete_page.py
+├── tests/
+│   ├── conftest.py              # fixtures: products, accounts, shop, logged_in_shop, fill_cart, saved login, step
+│   ├── test_login.py  test_catalog.py  test_cart.py  test_checkout.py   # one file per area
+│   └── test_auth_state.py       # saved login + isolation check
+├── helper_utility/helpers.py    # class Helper: by_locator(), read_test_data(), money_to_float(), Faker data
+└── helper_utility/steps.py      # the `step` fixture: numbered steps -> Allure step + trace group
 ```
+
+### Requirements and risks
+
+| Requirement | Marker | Risk | Level |
+| --- | --- | --- | --- |
+| REQ-01 Add products to the cart | `add_to_cart` | R01 Wrong cart contents | Critical |
+| REQ-02 Remove products from the cart | `update_cart` | R01 Wrong cart contents | Critical |
+| REQ-03 Check out: information, overview totals, order complete | `checkout` | R02 Wrong total or lost order | Critical |
+| REQ-04 Correct product information | `product_details` | R03 Product page differs from the list | High |
+| REQ-05 Log in and out securely | `secure_login` | R04 Wrong user gets in, or a valid user cannot | High |
+| REQ-06 Browse and sort the product list | `browse_catalog` | R05 Wrong name or price in the list (High); R07 Wrong sort order (Medium) | High / Medium |
 
 ---
 
@@ -43,22 +56,22 @@ helper_utility/steps.py          # the `step` fixture: numbered steps -> Allure 
 
 Unit 2 · LO3 · Concept/Lecture · 120 min · Virtual
 
-Unit 2 keeps WHAT Unit 1 tests (requirements, risks, data) and changes HOW: plain pytest tests drive Playwright page objects, markers replace Gherkin tags, and pytest fixtures replace behave hooks.
+Unit 2 keeps the working method of Unit 1 (requirements, risks, data files, page objects) and changes the tool: plain pytest tests drive Playwright page objects, markers replace Gherkin tags, and pytest fixtures replace behave hooks.
 
 ### 1. What is inherited from Unit 1, what is new
 
 | Unit 1 (behave + Selenium) | Unit 2 (pytest + Playwright) | Status |
 | --- | --- | --- |
-| `tests/features/*.feature` (14 scenarios) | One pytest test per scenario in `tests/ui/test_<area>.py`; Examples tables become `@pytest.mark.parametrize` | Rewritten as plain tests |
+| `*.feature` scenarios | One pytest test per scenario in `tests/test_<area>.py`; Examples tables become `@pytest.mark.parametrize` over a data file | Rewritten as plain tests |
 | Requirement tags `@add_to_cart` … | Markers `@pytest.mark.add_to_cart` …, declared in `pytest.ini` | Inherited |
-| `dataset/products.json` | Same file, plus type, vendor and options; new `cart.json`, `search.json` | Inherited and extended |
-| Tags `@critical`, `@smoke`, `@negative` | Same names as pytest markers: `pytest -m smoke`; the area is the file: `pytest tests/ui/test_cart.py` | Inherited |
-| Page Objects (`pages/`) | Same class names, Playwright `Locator` instead of `WebElement` | Ported |
-| `tests/environment.py` hooks | `tests/conftest.py` fixtures | Replaced |
+| `dataset/*.json` | One JSON file per area, read with `Helper.read_test_data("<area>")` | Inherited |
+| Tags `@critical`, `@smoke`, `@negative` | Same names as pytest markers: `pytest -m smoke`; the area is the file: `pytest tests/test_cart.py` | Inherited |
+| Page Objects, plain XPath locators at the bottom, `Helper.by_locator` | Same layout; Playwright `Locator` instead of `WebElement` | Ported |
+| `environment.py` hooks | `tests/conftest.py` fixtures | Replaced |
 | `WebDriverWait` explicit waits | Auto-waiting actions + retrying `expect()` | Replaced |
 | Fresh browser per scenario | Fresh **browser context** per test (much cheaper) | Improved |
 | Screenshot on failure | Screenshot + video + **trace** on failure | Extended (Day 6) |
-| — | Network interception, saved auth state, parallel runs | New (Day 6) |
+| — | Saved login state, parallel runs | New (Day 6) |
 
 ### 2. Playwright architecture
 
@@ -66,22 +79,23 @@ Unit 2 keeps WHAT Unit 1 tests (requirements, risks, data) and changes HOW: plai
 pytest session
 └── playwright  (driver process, one per worker)
     └── browser  (Chromium / Firefox / WebKit, one per worker, session scope)
-        └── context  (one per test: own cookies, cache, storage → isolation)
+        └── context  (one per test: own cookies, localStorage → own login, own cart)
             └── page  (one tab per test)
 ```
 
-A context costs milliseconds, so every test gets a clean cart without restarting the browser. In Unit 1 the same isolation needed a new Chrome per scenario.
+A context costs milliseconds, so every test starts logged out with an empty cart without restarting the browser. Swag Labs keeps the login in a cookie (`session-username`) and the cart in localStorage (`cart-contents`): both belong to the context, so no test sees another test's cart.
 
 ### 3. Locators
 
+Swag Labs marks its elements with `data-test` attributes, made for test automation. They do not change when the layout or the text changes, so they come first:
+
 | Priority | Locator (plain XPath) | Example in `pages/` |
 | --- | --- | --- |
-| 1 | Id | `//*[@id='cart']`, `//*[@id='checkout']`, `//*[@id='product-price']` |
-| 2 | Semantic attribute | `//*[@itemprop='name']` (product title: the first `<h1>` on the page is the logo) |
-| 3 | Text | `//a[normalize-space()='Forgot your password?']`, `//*[contains(text(),'No results found for')]` |
-| 4 | Stable attribute / form action | `//form[contains(@action,'/cart/add')]//*[@type='submit']`, `//input[@type='submit' and @value='Sold Out']` |
-| 5 | Scoped to a parent | `//*[@id='cart']//input[starts-with(@name,'updates')]` — scoped to `#cart`: every page also holds a hidden mini-cart with the same rows |
-| Never | Position | `(//a)[3]`, `//div[2]/a` |
+| 1 | `data-test` attribute | `//*[@data-test='checkout']`, `//*[@data-test='shopping-cart-badge']`, `//*[@data-test='error']` |
+| 2 | Id | `//*[@id='react-burger-menu-btn']` (the menu button has no `data-test`) |
+| 3 | Scoped to a parent by its text | `//*[@data-test='inventory-item'][.//*[@data-test='inventory-item-name' and normalize-space()='{}']]//button` — the button of one product card |
+| 4 | Button text inside a scope | `…//button[normalize-space()='Remove']` |
+| Never | Position | `(//button)[3]`, `//div[2]/a` |
 
 #### Locators and the custom BasePage methods (the same layout as Unit 1)
 
@@ -89,64 +103,66 @@ Locators are plain XPath strings that describe the element, grouped under a comm
 
 ```python
     # --- Locators -------------------------------------------------------------
-    # Cart table (inside #cart; the hidden mini-cart drawer repeats every row)
-    _cart_form = "//*[@id='cart']"
-    _quantity_boxes = "//*[@id='cart']//input[starts-with(@name,'updates')]"
+    # Cart items. .format(product_name): the line whose name is exactly product_name
+    _item_names = "//*[@data-test='cart-list']//*[@data-test='inventory-item-name']"
+    _item_line = "//*[@data-test='cart-list']//*[@data-test='inventory-item'][.//*[normalize-space()='{}']]"
+    _remove_button = _item_line + "//button[normalize-space()='Remove']"
     # Cart buttons
-    _update_button = "//*[@id='update']"
-    _checkout_button = "//*[@id='checkout']"
+    _continue_shopping_button = "//*[@data-test='continue-shopping']"
+    _checkout_button = "//*[@data-test='checkout']"
 ```
 
 `Helper.by_locator()` (`helper_utility/helpers.py`, the same prefixes as Unit 1) turns a locator into a Playwright selector:
 
 | Locator | Playwright selector |
 | --- | --- |
-| `//*[@id='cart']` (no prefix: what the pages write) | `xpath=//*[@id='cart']` |
-| `id=cart` or `id:cart` | `id=cart` |
-| `name=q` | `xpath=//*[@name='q']` |
-| `link=Forgot your password?` / `partial link=password` | `xpath=//a[normalize-space()='…']` / `xpath=//a[contains(normalize-space(),'…')]` |
-| `css=#cart`, `tag_name=h1`, `class_name=errors`, `xpath=//h1` | `css=#cart`, `css=h1`, `css=.errors`, `xpath=//h1` |
+| `//*[@data-test='checkout']` (no prefix: what the pages write) | `xpath=//*[@data-test='checkout']` |
+| `id=checkout` or `id:checkout` | `id=checkout` |
+| `name=user-name` | `xpath=//*[@name='user-name']` |
+| `link=About` / `partial link=Abo` | `xpath=//a[normalize-space()='…']` / `xpath=//a[contains(normalize-space(),'…')]` |
+| `css=#checkout`, `tag_name=h3`, `class_name=error`, `xpath=//h3` | `css=#checkout`, `css=h3`, `css=.error`, `xpath=//h3` |
 | `foo=bar` | `ValueError: Element locator with prefix 'foo' is not supported: 'foo=bar'` |
 
 Pages never call `self.page`: they call the `BasePage` methods, which log the action (shown in the report of a failed test, passwords as `***`):
 
 | Group | Methods |
 | --- | --- |
-| Navigation | `open_page(path)`, `wait_until_url_contains(fragment)` |
-| Locators | `find_element(locator)` (first match), `find_elements(locator)` (all matches) — Playwright locators, lazy: they wait when an action or `expect()` uses them |
-| Actions | `click_element`, `click_and_wait_for_new_page` (form buttons), `click_and_wait_for_response(locator, url_part=)` (AJAX), `type_text(locator, text, secret=False)` |
+| Navigation | `open_page(path)`, `wait_until_url_contains(fragment)`, `wait_until_url_ends_with(suffix)` |
+| Locators | `find_element(locator)` (first match), `find_elements(locator)` (all matches), `get_texts(locator)` — Playwright locators are lazy: they wait when an action or `expect()` uses them |
+| Actions | `click_element`, `type_text(locator, text, secret=False)`, `select_option(locator, label)` |
 | State | `is_element_visible(locator, timeout=0)` — waits for the state up to `timeout` seconds, never a fixed sleep |
-| Header | `header_cart_link`, `search_for(keyword)` |
+| Header | `page_title`, `cart_badge`, `get_cart_badge_count()`, `open_cart()` |
+| Side menu | `logout()`, `reset_app_state()` |
 
-No method returns the page for chaining: open a page, then use it, on two lines. Only methods the pages or tests use are kept.
+Swag Labs is a single-page app: a click changes the address without loading a new page. So the pages wait for the address (`wait_until_url_contains("/cart.html")`), not for a page load. Every wait and action runs inside `_report_timeout()`: a Playwright timeout logs an ERROR line and says what the test was doing and on which page ("Clicking '//*[@data-test='checkout']' timed out on https://www.saucedemo.com/cart.html"), followed by Playwright's call log.
 
-These layout rules are checked in review (Day 8, B4 checklist): a locator that `Helper.by_locator()` rejects fails the first test that uses it, with the locator in the message.
+No method returns the page for chaining: call a method, then use the page, on two lines. Only methods the pages or tests use are kept.
 
 ### 4. Fixtures (`tests/conftest.py`)
 
 | Fixture | Scope | Replaces in Unit 1 | Does |
 | --- | --- | --- | --- |
 | `browser`, `context`, `page` | session / test / test | `before_scenario` + `after_scenario` | Provided by pytest-playwright |
-| `browser_context_args` | session | `_make_driver()` options | Viewport 1366×900, locale en-GB |
+| `browser_context_args` | session | `_make_driver()` options | Viewport 1366×900, locale en-US |
 | `products` | session | `before_all` loading JSON | `Helper.read_test_data("products")` |
-| `accounts` | test | — | Test accounts by name (`unknown-user`, `new-customer`, `customer-without-email`, `malformed-email`), made up by Faker for every test: no email or password is written in any file |
-| `shop` | test | `Helper.create_page_object()` | All Page Objects bound to this test's page |
-| `add_product_and_open_cart` | test | `Given ... in the cart` step | Factory: `add_product_and_open_cart("Noir jacket", 2)` |
-| `block_third_party` | test, autouse | — | Network control (Day 6) |
+| `swag_accounts` | session | — | The demo accounts from `.env` (`standard-user`, `locked-out-user`); skips with a clear message when `.env` is missing |
+| `accounts` | test | — | Every login of `dataset/login.json` by name: the demo accounts + made-up ones (Faker): `unknown-user`, `wrong-password`, `missing-username`, `missing-password` |
+| `checkout_information` | test | — | A made-up customer for the checkout form (Faker) |
+| `shop` | test | `Helper.create_page_object()` | Every Page Object bound to this test's page: `shop.login`, `shop.inventory`, `shop.cart` … |
+| `logged_in_shop` | test | `Given I am logged in` step | `shop`, logged in as the standard user, on the products page |
+| `fill_cart` | test | `Given ... in the cart` step | Factory: `fill_cart(["Sauce Labs Backpack", "Sauce Labs Onesie"])` |
 | `saved_login_state` | session | — | Saved login (Day 6) |
+| `step` | test | — | Numbered steps (section 5) |
 
 ```python
 @pytest.fixture
-def add_product_and_open_cart(shop, products):
-    """Factory fixture: add_product_and_open_cart("Noir jacket", 2) puts 2 Noir jackets in this test's cart."""
-    def _add(name: str, quantity: int = 1):
-        shop.product.open_product_page(products[name]["path-name"])
-        shop.product.add_to_cart(quantity)
-        shop.cart.open_page()
-        return shop.cart
-    return _add
+def fill_cart(logged_in_shop):
+    """Factory fixture: fill_cart(["Sauce Labs Backpack", ...]) adds the products from the products page."""
+    def add_products(product_names: list[str]):
+        logged_in_shop.inventory.add_products_to_cart(product_names)
+        return logged_in_shop
+    return add_products
 ```
-
 
 ### 4b. Test data (`dataset/`) and random data (Faker)
 
@@ -154,62 +170,64 @@ Tests hold no values of their own: they read one JSON file per area through `Hel
 
 | File | Holds | Used by |
 | --- | --- | --- |
-| `products.json` | 7 products: `path-name`, `price`, `status`, `type`, `vendor`, `options` (Size, Color …) | `products` fixture: catalog, product, cart and product API tests |
-| `cart.json` | `add` (product × quantity → total), `change` (from → to → total), `remove` | `test_cart.py`, `test_cart_api.py` (the same cases in the browser and through the API) |
-| `search.json` | `matching` (keyword → expected products: "jacket", "JACKET", "jack", "sandals", "heels"), `no_match` ("zzqqxx", "<script>") | `test_search.py`, `test_search_api.py` |
+| `products.json` | 6 products: `id` (the product page is `/inventory-item.html?id=<id>`), `price`, `description` | `products` fixture: list, product page, cart, sorting |
+| `login.json` | `rejected`: account name → error (unknown user, wrong password, locked-out user, missing username, missing password); the "not logged in" error | `test_login.py`, `test_auth_state.py` |
+| `catalog.json` | `sorting`: the 4 options, sorted by name or price, ascending or descending | `test_catalog.py` |
+| `cart.json` | `add` (lists of products), `remove` (products + the one to remove) | `test_cart.py` |
+| `checkout.json` | `totals` (products → item total, 8% tax, total), `missing_information` (empty field → error), the confirmation heading | `test_checkout.py` |
 
 ```python
 CART = Helper.read_test_data("cart")
 
 @pytest.mark.parametrize("case", CART["add"], ids=[case["id"] for case in CART["add"]])
-def test_cart_total_equals_price_times_quantity(add_product_and_open_cart, step, case):
+def test_add_products_to_the_cart(fill_cart, step, case):
     ...
 ```
 
-Account data is never written in a file: the `accounts` fixture makes up new accounts for every test with Faker (`Helper.random_customer()`: name, a unique `…@example.com` email, a strong password; `random_unregistered_login()`, `random_malformed_email()`). Only the real login of `pytest -m auth` comes from `.env`.
+Account data is never written in a file that goes to GitHub. The Swag Labs demo accounts (listed on its login page) live in `.env`, which git ignores; `.env.example` has only the names of the variables. Everything else is made up by Faker for every test: an unknown username, a wrong password, the checkout customer.
 
-`Helper` (`helper_utility/helpers.py`) is what pages, API objects and tests share:
+`Helper` (`helper_utility/helpers.py`) is what pages and tests share:
 
 | Area | Methods |
 | --- | --- |
 | Element finder | `by_locator()`: locator string → Playwright selector; an unknown prefix raises `ValueError` |
 | Test data | `read_test_data(area)`: a missing file raises `FileNotFoundError` listing the areas that exist |
-| Prices | `money_to_float("£1,120.00")` → 1120.0; `money_to_pence("£1,120.00")` → 112000 (the API's unit) |
-| Random data | `random_customer()`, `random_unregistered_login()`, `random_malformed_email()` |
-
-`BasePage` reports failures clearly: every wait and action runs inside `_report_timeout()`, so a Playwright timeout logs an ERROR line and says what the test was doing and on which page ("Clicking '//*[@id='checkout']' timed out on https://…/cart"), followed by Playwright's call log. `open_page()` stops with a clear message when the store shows its bot check ("Verifying your connection") instead of the page; it never tries to get past it.
+| Prices | `money_to_float("$1,120.00")` → 1120.0 (also inside a text: `"Item total: $29.99"` → 29.99) |
+| Random data | `random_checkout_information()`, `random_unregistered_login()`, `random_password()` |
 
 ### 5. Assertions
 
 `expect()` retries until the condition holds or the timeout (5 s) ends, so no explicit waits are written:
 
 ```python
-@pytest.mark.critical
 @pytest.mark.smoke
-@pytest.mark.add_to_cart                      # requirement REQ-01
-def test_add_an_in_stock_product_to_the_cart(shop, products, step):
-    """A customer adds one in-stock product: the cart shows 1 item at the product's price."""
+@pytest.mark.add_to_cart                      # requirement REQ-01 (the file adds @critical)
+def test_add_one_product_to_the_cart(logged_in_shop, products, step):
+    """A customer adds one product: the badge shows 1, the button turns into Remove, the cart lists it."""
     # Test data
-    grey_jacket = products["Grey jacket"]
+    backpack = "Sauce Labs Backpack"
 
     # Execution steps
     step_number = 1
-    with step(step_number, "Open the product page of Grey jacket"):
-        shop.product.open_product_page(grey_jacket["path-name"])
+    with step(step_number, f"Add {backpack} from the products page"):
+        logged_in_shop.inventory.add_product_to_cart(backpack)
     step_number += 1
-    with step(step_number, "Add 1 item to the cart"):
-        shop.product.add_to_cart(1)           # waits for the AJAX /cart/add answer
+    with step(step_number, "Verify the cart badge shows 1 and the button says Remove"):
+        expect(logged_in_shop.inventory.cart_badge).to_have_text("1")
+        expect(logged_in_shop.inventory.cart_button(backpack)).to_have_text("Remove")
     step_number += 1
-    with step(step_number, "Verify the cart has 1 item, total £55.00"):
-        shop.cart.open_page()
-        verify_cart_contents(shop.cart, 1, "£55.00")   # expect(header_cart_link) "My Cart (1)" + total
+    with step(step_number, f"Open the cart and verify it holds {backpack} at {products[backpack]['price']}"):
+        logged_in_shop.inventory.open_cart()
+        assert logged_in_shop.cart.get_product_names() == [backpack]
+        assert logged_in_shop.cart.get_product_price(backpack) == products[backpack]["price"]
 ```
 
 | Unit 1 | Unit 2 |
 | --- | --- |
 | `self.wait.until(EC.url_contains("checkout"))` | `expect(page).to_have_url(re.compile("checkout"))` |
-| `assert cart.is_empty()` after a wait | `expect(cart.quantity_boxes).to_have_count(0)` |
-| `assert error_text().strip()` | `expect(shop.login.error).to_be_visible()` |
+| `assert badge.text == "1"` after a wait | `expect(shop.inventory.cart_badge).to_have_text("1")` |
+| `assert error_text().strip()` | `expect(shop.login.error_message).to_have_text("Epic sadface: …")` |
+| `assert not badge.is_displayed()` | `expect(shop.inventory.cart_badge).to_be_hidden()` |
 
 #### Test layout: test data, then numbered steps
 
@@ -219,29 +237,27 @@ Every test reads the same way: a docstring saying what it proves, `# Test data` 
 | --- | --- |
 | Allure report | The test as a list "Step 1: … / Step 2: … / Step 3: …", the failed step in red; the docstring is the description, the markers are tags |
 | Trace Viewer | The clicks and waits of a failed test grouped under the step name |
-| HTML / JUnit report | The error ends with `failed in Step 3: Verify the cart has 1 item, total £55.00` |
+| HTML / JUnit report | The error ends with `failed in Step 3: Open the cart and verify it holds …` |
 
 Page objects follow the same idea: methods are grouped under a banner naming the area of the page, every public method has a docstring, locators stay at the bottom:
 
 ```python
-class ProductPage(BasePage):
+class CartPage(BasePage):
     ############################################################################
-    # Add to cart methods
-    # Scope: Product page > Add to cart form
+    # Navigation methods
+    # Scope: Cart page > Continue Shopping, Checkout
     ############################################################################
-    def add_to_cart(self, quantity: int = 1):
-        """Add ``quantity`` items and wait until the store has answered every add."""
-        ...
-
-    # --- Locators -------------------------------------------------------------
-    _add_form = "form[action*='/cart/add']"
+    def click_checkout(self):
+        """Click "Checkout" and wait for the checkout information page."""
+        self.click_element(self._checkout_button)
+        self.wait_until_url_contains("/checkout-step-one.html")
 ```
 
 Both rules are part of the review checklist (Day 8, B4).
 
 ### 6. Isolation check
 
-`tests/ui/test_auth_state.py::test_auth_state_does_not_leak_into_other_tests` proves that a test using the default `page` is not logged in even when another test in the same session uses a saved login.
+`tests/test_auth_state.py::test_login_state_does_not_leak_into_other_tests` proves that a test using the default `page` is not logged in even when another test in the same session uses the saved login.
 
 ### 7. Run
 
@@ -249,25 +265,26 @@ Both rules are part of the review checklist (Day 8, B4).
 cd ATEST03-unit2
 pip install -r requirements.txt
 playwright install chromium
-pytest --collect-only -q          # 37 UI tests (29 in the default run) + 36 API tests (31 in the default run)
-pytest -m smoke                   # same smoke markers as Unit 1's tags
+cp .env.example .env              # fill in the demo accounts shown on https://www.saucedemo.com
+pytest --collect-only -q          # 43 tests
+pytest -m smoke                   # 3 tests: login, add to cart, complete an order
 pytest --headed --slowmo 300      # watch it run
 ```
 
 ### 8. Review questions
 
 1. Why does a new browser context give the same isolation as a new browser, and why is it cheaper?
-2. Which Unit 1 file did `browser_context_args` replace?
-3. Rewrite `self.wait.until(lambda d: name in body_text())` as a Playwright assertion.
-4. Why is `get_by_role("link", name=...)` preferred over `a[href*='/cart']`?
+2. Where does Swag Labs keep the cart, and why does that make the context the right unit of isolation?
+3. Rewrite `self.wait.until(lambda d: badge().text == "2")` as a Playwright assertion.
+4. Why is `//*[@data-test='checkout']` preferred over `//button[2]` or `//button[text()='Checkout']`?
 
 ---
 
-## Day 6 – Tracing, Network Interception, Authentication State, Parallel Execution & Reporting
+## Day 6 – Tracing, Authentication State, Parallel Execution & Reporting
 
 Unit 2 · LO3 · Concept/Lecture · 120 min · Virtual
 
-Day 6 adds what Unit 1 did not have: a full trace of every failed test, control over network traffic, login reuse and parallel runs.
+Day 6 adds what Unit 1 did not have: a full trace of every failed test, login reuse and parallel runs.
 
 ### 1. Tracing (extends Unit 1's screenshot on failure)
 
@@ -284,107 +301,45 @@ addopts =
 | Unit 1 | Unit 2 |
 | --- | --- |
 | `after_step` saves one PNG | `test-results/<test>/trace.zip`, `test-failed-1.png`, `video.webm` |
-| Shows the last screen only | Every action, DOM snapshot before/after, console, network, source line |
+| Shows the last screen only | Every action, DOM snapshot before/after, console, network, source line, the numbered steps |
 
 ```bash
 playwright show-trace test-results/<test-folder>/trace.zip   # open a trace
 pytest --tracing on                                          # keep traces for every test while debugging
 ```
 
-### 2. Network interception
+### 2. Known defects: `xfail(strict=True)`
 
-#### 2.1 Block third-party traffic (autouse fixture)
-
-The request handling lives in `api/` (`CartApi`, `NetworkApi`); the tests and fixtures only call it and check the result.
+**Finding F1:** after **Reset App State** (side menu) the cart is empty — the badge disappears — but the product's button still says "Remove" instead of "Add to cart". A customer sees a product as "in the cart" when it is not.
 
 ```python
-# tests/ui/conftest.py - the fixture only calls NetworkApi
-@pytest.fixture(autouse=True)
-def block_third_party(request, base_url: str):
-    if request.node.get_closest_marker("allow_third_party") or "page" not in request.fixturenames:
-        yield []
-        return
-    page = request.getfixturevalue("page")
-    yield NetworkApi(page.context.request, page).block_third_party_hosts(urlparse(base_url).hostname)
-
-# api/network_api.py - the request handling itself
-def block_third_party_hosts(self, store_host: str) -> list[str]:
-    blocked: list[str] = []
-    self.page.context.route("**/*", partial(self._abort_or_continue, store_host=store_host, blocked=blocked))
-    return blocked
+@pytest.mark.xfail(strict=True, reason="Finding F1: after Reset App State the cart is empty but the product's button "
+                                        "still says Remove (checked 2026-11-27)")
+def test_reset_app_state_empties_the_cart_and_resets_the_buttons(fill_cart, step):
 ```
 
-Allowed: the store host and `*.shopify.com`, `*.myshopify.com`, `*.shopifycdn.com`. Everything else (Facebook, Twitter, Pinterest, the Sauce app) is aborted. Risk R09 (third-party widgets), manual in Unit 1, becomes testable.
-
-#### 2.2 Network tests removed
-
-The suite once had a `tests/ui/test_network.py` (request assertion, fault injection, slow network). It was removed: those cases tested Playwright techniques more than the store's requirements, and they added load on the live store. What stays is the autouse block above, which keeps every UI test away from third-party scripts.
-
-### 2b. API testing (`tests/api/`)
-
-The store's pages call a JSON API (the Shopify AJAX API). Testing it directly is fast (13 tests in about 5 s), needs no browser and shows what the server itself allows. The API objects sit in `api/`, next to `pages/` and split the same way, one class per area:
-
-| API object (`api/`) | Method | Endpoint |
-| --- | --- | --- |
-| `BaseApi` | `get(endpoint, params)`, `post(endpoint, data)` — logged with the status | — |
-| `ProductApi` | `request_product(path_name)` | `GET /products/<path-name>.js` |
-| `CartApi` | `add_product_to_cart(path_name, quantity)`, `get_cart()`, `change_cart_line_quantity(line, quantity)` | `POST /cart/add.js`, `GET /cart.js`, `POST /cart/change.js` |
-| `SearchApi` | `search_product_titles(keyword)` | `GET /search/suggest.json` |
-| `AccountApi` | `is_logged_in()`, `get_account_redirect()`, `login(email, password)`, `logout()`, `register_account(...)`, `request_password_reset(email)` — the store's account forms, posted without a browser; a redirect to the bot check (`/challenge`) stops with a clear error, it is never bypassed | `GET /account`, `POST /account/login`, `GET /account/logout`, `POST /account`, `POST /account/recover` |
-| `NetworkApi` | `block_third_party_hosts(store_host)` | the page's traffic (route + abort) |
-
-| Fixture | Where | Request context | Used for |
-| --- | --- | --- | --- |
-| `shop_api` | `tests/api/conftest.py` | its own (`playwright.request.new_context`): no browser, its own cart | API tests: `shop_api.product`, `.cart`, `.search`, `.account` (like `shop` for pages) |
-| `shop_api_in_browser` | `tests/ui/conftest.py` | the page's (`page.context.request`) + the page: shares the browser's cookies | UI tests: API set-up (`.cart`, `.account`) that the page then shows |
-
-| Test | Checks | Requirement |
-| --- | --- | --- |
-| `test_product_api.py`: `…_returns_the_catalog_name_price_and_stock` (×7), `…_returns_the_catalog_type_vendor_and_options` (×7), `test_unknown_product_returns_404` | title, price in pence, `available`, type, vendor, options = `dataset/products.json`; 404 for an unknown product | REQ-04 |
-| `test_cart_api.py`: `…_adds_the_product_and_totals_the_price` (×4), `…_changes_the_quantity_of_a_line` (×2), `…_removes_a_line_set_to_zero` | the cases of `dataset/cart.json`: item count and total in pence | REQ-01, REQ-02 |
-| `test_cart_api.py`: `test_cart_api_refuses_a_sold_out_product` | **xfail, finding A1** | REQ-04 |
-| `test_search_api.py`: `…_suggests_matching_products`, `…_suggests_nothing_for_an_unknown_keyword` | the cases of `dataset/search.json`: expected suggestions / none | REQ-08 |
-| `test_account_api.py`: `test_account_page_sends_a_guest_to_the_login_page` | `/account` redirects a guest to `/account/login` | REQ-05 |
-| `test_account_api.py`: `test_login_api_rejects_invalid_credentials` (×2, manual), `test_login_api_logs_the_customer_in_and_out` (auth), `test_register_api_rejects_a_missing_email` (manual), `test_register_api_creates_an_account_and_logs_it_in` (data_creating) | login refused / accepted, logout, registration — excluded by default like their UI twins (CAPTCHA, real account, real data) | REQ-05, REQ-07 |
-| `tests/ui/test_cart.py`: `test_cart_prepared_through_the_api_shows_in_the_browser` | API for the set-up, browser for the check | REQ-01 |
-
-**Finding A1:** Brown Shades is sold out (`"available": false`, the product page shows a disabled "Sold Out" button), but `POST /cart/add.js` still adds it (HTTP 200, the cart holds 1 item). The UI test passes; only the API test sees it. The test states the expected behaviour (the add is refused) and is marked `xfail(strict=True)` with the finding: the report lists it as a known defect, and when the store is fixed the test passes and `strict` makes the run fail, so the marker is removed.
-
-```bash
-pytest tests/api       # the API tests only (no browser)
-pytest tests/ui        # the UI tests only
-```
+The test states the expected behaviour and is marked `xfail(strict=True)` with the finding: the report lists it as a known defect, and when the shop is fixed the test passes and `strict` makes the run fail, so the marker is removed. Run it without the marker to see the failing step: `pytest --runxfail tests/test_cart.py -k reset`.
 
 ### 3. Authentication state
 
-Unit 1 typed credentials in every scenario that needed a login. Unit 2 logs in once per session and saves cookies and localStorage:
+Unit 1 typed credentials in every scenario that needed a login. Playwright can log in once and save cookies and localStorage to a file; a new context created from the file starts logged in:
 
 ```python
 @pytest.fixture(scope="session")
-def saved_login_state(browser: Browser, base_url: str) -> Path:
-    email, password = os.getenv("SAUCE_EMAIL"), os.getenv("SAUCE_PASSWORD")
-    if not (email and password):
-        pytest.skip("Set SAUCE_EMAIL and SAUCE_PASSWORD to run @auth tests")
+def saved_login_state(browser: Browser, base_url: str, swag_accounts) -> Path:
+    """Log in once per session and save cookies + localStorage; a test opens a context from the file."""
     context = browser.new_context(base_url=base_url)
-    page = context.new_page()
-    login = LoginPage(page)
+    login = LoginPage(context.new_page())
     login.open_page()
-    login.login(email, password)
-    page.wait_for_url("**/account**")
+    standard_user = swag_accounts["standard-user"]
+    login.login_and_wait_for_products(standard_user["username"], standard_user["password"])
     AUTH_FILE.parent.mkdir(exist_ok=True)
     context.storage_state(path=str(AUTH_FILE))
     context.close()
     return AUTH_FILE
 ```
 
-Used by `tests/ui/test_auth_state.py` (risk R04). `.auth/customer.json` holds a session: never commit it.
-
-```bash
-# Linux/macOS
-SAUCE_EMAIL=you@example.com SAUCE_PASSWORD='...' pytest -m auth
-# Windows PowerShell
-$env:SAUCE_EMAIL="you@example.com"; $env:SAUCE_PASSWORD="..."; pytest -m auth
-```
+Used by `tests/test_auth_state.py` (risk R04). `.auth/standard_user.json` holds a session: it is in `.gitignore`, never commit it. The other tests log in through the form (`logged_in_shop`): on Swag Labs that takes well under a second, and it keeps every test independent of the session's login cookie, which Swag Labs lets expire 10 minutes after the login.
 
 ### 4. Parallel execution
 
@@ -393,7 +348,7 @@ pytest -n auto        # pytest-xdist, one worker per CPU
 pytest -n 4
 ```
 
-Safe because every test has its own context (Day 5) and no test depends on another. The demo store is shared: keep `-n` small on the live site.
+Safe because every test has its own context (Day 5) and no test depends on another. Swag Labs is a static site, so parallel runs do not load a shared server.
 
 ### 5. Reporting patterns
 
@@ -404,45 +359,44 @@ Safe because every test has its own context (Day 5) and no test depends on anoth
 | Allure results (numbered steps) | allure-pytest (`--alluredir`); view with `allure serve reports/allure-results` (Allure CLI) | `reports/allure-results/` |
 | Trace, screenshot, video | pytest-playwright | `test-results/` |
 
-Every test carries one requirement marker (`@pytest.mark.add_to_cart` …): `pytest -m add_to_cart` runs one requirement, `pytest -m critical --collect-only -q` lists every Critical-risk test, and the markers appear in the HTML report.
+Every test carries one requirement marker (`@pytest.mark.add_to_cart` …) and one risk-level marker: `pytest -m add_to_cart` runs one requirement, `pytest -m critical --collect-only -q` lists every Critical-risk test, and the markers appear in the HTML report. `-rfEs` in `pytest.ini` lists failures, errors and skips (with their reason) at the end of the run.
 
 ### 6. Review questions
 
 1. What does a trace show that a screenshot cannot?
-2. Why is `block_third_party` autouse, and how does a test opt out?
+2. Why is F1 an `xfail(strict=True)` and not a skipped or deleted test?
 3. Why must `saved_login_state` be session-scoped, and why must `.auth/` stay out of git?
 4. Why is `pytest -n auto` safe for this suite?
 
 ---
 
-## Day 7 – Playwright Implementation Lab: Prioritised End-to-End Workflows with Fixtures, Tracing & Network Control
+## Day 7 – Playwright Implementation Lab: Prioritised End-to-End Workflows with Fixtures & Tracing
 
 Unit 2 · LO3 · Assignment/Lab · 150 min · Hybrid
 
-The lab automates the Unit 1 risk priorities on Playwright: 22 browser tests in the default run, plus 2 auth tests with credentials, 3 `manual` tests (CAPTCHA) and 1 `data_creating` test.
+The lab automates the risk priorities on Playwright: 43 tests, all in the default run (Swag Labs needs no manual or data-creating exclusions).
 
-### 1. Prioritised workflows (from the Unit 1 risk table)
+### 1. Prioritised workflows (from the risk table)
 
 | Priority | Workflow | Risk | Tests | Unit 2 technique |
 | --- | --- | --- | --- | --- |
-| P1 | Add to cart, totals, change, remove | R01 Critical (20) | `test_cart.py` (cases from `dataset/cart.json`) + the cart API tests | `add_product_and_open_cart` fixture, `parametrize`, API set-up |
-| P1 | Cart → checkout | R02 Critical (15) | 1 test in `test_checkout.py` | `expect(page).to_have_url` |
-| P1 | Product detail, sold-out | R03 High (12) | 2 tests in `test_catalog.py` | `//*[@itemprop='name']`, `to_be_disabled()` |
-| P1 | Login, password reset, saved session | R04 High (12) | password reset + 2 auth tests; 2 invalid-login tests are `manual` (CAPTCHA) | `saved_login_state` storage state |
-| P1 | Catalog prices and stock | R05 High (12) | 7 parametrized cases (one per product) | `parametrize` |
-| P2 | Registration validation | R06 Medium (9) | 1 `manual` test (CAPTCHA) + 1 `data_creating` test | — |
-| P2 | Search | R07 Medium (9) | 2 tests in `test_search.py` | no-results message |
-| P2 | Third-party failure does not break shopping | R09 Medium (6) | every UI test runs with third-party hosts blocked | `block_third_party` route |
+| P1 | Add to cart, remove, keep while shopping, reset | R01 Critical | `test_cart.py`: 10 tests (cases from `dataset/cart.json`), 1 of them `xfail` (F1) | `fill_cart` factory, `parametrize`, `to_be_hidden()` |
+| P1 | Checkout: information, totals, complete | R02 Critical | `test_checkout.py`: 7 tests (cases from `dataset/checkout.json`) | Faker customer, `to_have_text` on totals |
+| P1 | Product page = product list | R03 High | `test_catalog.py`: 6 cases (one per product) | `parametrize` over `products.json` |
+| P1 | Login, logout, locked-out user, saved session | R04 High | `test_login.py` 8 tests + `test_auth_state.py` 2 tests | `accounts` from `.env` + Faker, `saved_login_state` |
+| P1 | Product list names, descriptions and prices | R05 High | `test_catalog.py`: 6 cases | `product_card(name)` |
+| P2 | Sorting | R07 Medium | `test_catalog.py`: 4 cases (`dataset/catalog.json`) | expected order computed from `products.json` |
 
 ### 2. Files
 
 | File | Role |
 | --- | --- |
-| `tests/ui/test_<area>.py` | One file per area; every test has a risk, a suite and a requirement marker |
-| `tests/conftest.py` | Fixtures, network control, auth state |
-| `tests/ui/test_auth_state.py` | Saved login and isolation check |
-| `pages/` | Page Objects ported from Unit 1 |
-| `pytest.ini` | base URL, tracing, reports, default marker filter, marker list (`--strict-markers`) |
+| `tests/test_<area>.py` | One file per area; every test has a risk, a suite and a requirement marker |
+| `tests/conftest.py` | Fixtures: data, accounts, page objects, logged-in shop, cart factory, saved login, steps |
+| `tests/test_auth_state.py` | Saved login and isolation check |
+| `pages/` | Page Objects, one per page of the shop |
+| `dataset/` | Test data, one file per area |
+| `pytest.ini` | base URL, tracing, reports, marker list (`--strict-markers`) |
 
 ### 3. Run the lab
 
@@ -450,30 +404,31 @@ The lab automates the Unit 1 risk priorities on Playwright: 22 browser tests in 
 cd ATEST03-unit2
 pip install -r requirements.txt
 playwright install chromium
-pytest                              # default suite
-pytest -m smoke                     # @smoke: add to cart + checkout
+cp .env.example .env                # fill in the demo accounts
+pytest                              # the whole suite
+pytest -m smoke                     # login + add to cart + complete an order
 pytest -n auto                      # parallel
-pytest -m auth                      # needs SAUCE_EMAIL / SAUCE_PASSWORD
 pytest -m critical                  # every Critical-risk test
 pytest -m "critical and not negative"
+pytest tests/test_checkout.py       # one area
 ```
 
 ### 4. Expected results
 
 | Check | Result |
 | --- | --- |
-| `pytest` | 59 passed (29 UI + 30 API), 1 xfailed (API, finding A1), 13 deselected (`auth` ×4, `manual` ×7, `data_creating` ×2) |
-| `pytest -n auto` | 35 passed, 1 xfailed (run on an earlier version of the suite; the live store is normally run serially to keep its load light) |
-| `pytest -m auth` (with an account) | 2 passed |
+| `pytest` | 42 passed, 1 xfailed (finding F1), about 50 s |
+| `pytest -n 4` | 42 passed, 1 xfailed, about 23 s (2 runs, same result) |
+| `pytest` without `.env` | every test that needs an account is skipped, with the variables to set |
 | Failed test | `test-results/<test>/trace.zip`, screenshot, video |
 
-Verified on the live store (2026-11-25). Two things the live store taught the suite: the theme needs jQuery from `ajax.googleapis.com` (blocked, the "Sold Out" button never renders and Add to Cart turns into a full-page post), and its CAPTCHA stops the login and registration forms. A third came on 2026-11-27: many runs from one network in a short time get HTTP 429 on Add to Cart, then the Cloudflare check ("Just a moment..."). Such a test stops at once and is reported SKIPPED with the reason (`StoreBlockedError` + a `pytest_runtest_makereport` hook in `tests/conftest.py`), not FAILED; the check is never bypassed. Wait a few minutes and run serially, one folder at a time if needed.
+Verified on www.saucedemo.com (2026-11-27).
 
 ### 5. Lab tasks
 
-1. Add a fault-injection test: the cart page answers 503. What should the customer see? Write the assertion.
-2. Make `test_product_page_shows_the_catalog_name_and_price` fail by changing the expected price, then open its trace and find the failing step.
-3. Add a search test for "sandals" with the right requirement and risk markers. Run `pytest -m search_products` and check that it runs with the other REQ-08 tests.
+1. Add a checkout case for three products to `dataset/checkout.json` (compute the 8% tax yourself). Which test runs it, without a code change?
+2. Make `test_product_page_shows_the_same_name_description_and_price` fail by changing a price in `products.json`, then open its trace and find the failing step.
+3. Add a login case for `problem_user` (a demo account that logs in but shows wrong images): which fixture and which `.env` variable does it need?
 4. Run `pytest -n auto` three times and compare durations with the serial run.
 
 ---
@@ -494,16 +449,16 @@ Day 8 closes both units: part A revises Unit 2 against Unit 1, part B makes the 
 | Isolation | New browser per scenario | New context per test |
 | Waiting | `WebDriverWait` | Actions auto-wait, `expect()` retries |
 | Failure evidence | Screenshot | Trace + screenshot + video |
-| Network | Not controlled | Third-party hosts blocked in every UI test |
-| Login | UI login each time | Saved storage state |
+| Login | UI login each time | UI login per test + saved storage state |
 | Speed | Serial | `-n auto` parallel |
-| Selection | `behave --tags=@cart` | `pytest tests/ui/test_cart.py`, `pytest -m add_to_cart` |
+| Selection | `behave --tags=@cart` | `pytest tests/test_cart.py`, `pytest -m add_to_cart` |
+| Application | Shopify demo store | Swag Labs (no bot protection: see the introduction) |
 
 Revision questions:
 
-1. Which Unit 1 files does Unit 2 run without changes, and why is that useful?
-2. Name two risks whose test technique changed in Unit 2 and explain how.
-3. Which Unit 1 review findings does Unit 2 address? (F3 stability; F7 and F8 form-submit races, fixed in both units.)
+1. Which parts of Unit 1 (data files, page-object layout, markers) carry over unchanged, and why is that useful?
+2. Why did Unit 2 move from the Shopify store to Swag Labs, and why is bypassing a bot check never the answer?
+3. Which Unit 1 review findings does Unit 2 address? (F3 stability: auto-wait and `expect()`; F7 and F8 form-submit races: every click that changes the page waits for the new address.)
 
 ### Part B – Reliability and maintainability (120 min)
 
@@ -511,15 +466,15 @@ Revision questions:
 
 ```text
 test fails
- ├─ 1. read the assertion message in reports/report.html
+ ├─ 1. read the assertion message in reports/report.html ("failed in Step N: ...")
  ├─ 2. open test-results/<test>/trace.zip   (playwright show-trace)
  │     ├─ Actions tab: which step, which locator, how long it waited
  │     ├─ Snapshots: DOM before/after the action
- │     └─ Network tab: status codes, slow or failed requests
+ │     └─ Console tab: errors of the shop's JavaScript
  ├─ 3. classify
- │     ├─ product defect   → wrong price, wrong total, error page → raise a bug with the trace
- │     ├─ test defect      → locator changed, wrong assumption → fix in pages/ or the test
- │     └─ environment      → store down, captcha, network → retry later, mark @manual if persistent
+ │     ├─ product defect   → wrong total, wrong button text → raise a bug with the trace, xfail(strict) meanwhile
+ │     ├─ test defect      → locator changed, wrong assumption → fix in pages/ or the data file
+ │     └─ environment      → site down, network, missing .env → retry later, or fix the set-up
  └─ 4. if it passes on rerun without a change → flaky: see B2
 ```
 
@@ -554,10 +509,10 @@ Typical root causes and the fix used in this code:
 | Root cause | Fix in this repository |
 | --- | --- |
 | Fixed waits | None used; `expect()` and `wait_for_url` only |
-| Next action before the previous request ends | `BasePage.submit()` waits for the navigation after every form button; add-to-cart also waits for the `/cart/add` response (Unit 1 findings F7, F8: the failure screenshot showed the old cart) |
-| Third-party scripts | `block_third_party` autouse fixture |
-| Shared state between tests | One context per test; `test_auth_state_does_not_leak_into_other_tests` |
-| Positional selectors | Not used; role, text and stable attributes only |
+| Next action before the page changed | Every click that changes the page waits for the new address (`wait_until_url_contains`); the single-page app loads no new document, so a load-state wait would return at once |
+| Shared state between tests | One context per test (own cookie, own localStorage cart); `test_login_state_does_not_leak_into_other_tests` |
+| Positional selectors | Not used; `data-test` attributes and text inside a scope only |
+| Ties in sorted data | Two products share a price ($15.99): price sorting compares the prices, not the names |
 
 #### B3. Stability checks before a commit
 
@@ -579,20 +534,20 @@ Select-String -Path tests\*.py -Pattern ':nth-child|nth=|\.nth\('               
 
 #### B4. Maintainability criteria (checklist)
 
-- [ ] Every requirement REQ-01 … REQ-08 has a test: `pytest -m <requirement> --collect-only -q`
-- [ ] Tests read like the requirement: actions and checks through page objects, no URL or CSS in tests
-- [ ] No locator outside `pages/`
+- [ ] Every requirement REQ-01 … REQ-06 has a test: `pytest -m <requirement> --collect-only -q`
+- [ ] Tests read like the requirement: actions and checks through page objects, no URL or locator in tests
+- [ ] No locator outside `pages/`; test values in `dataset/`, not in the tests
 - [ ] Every test has a docstring, `# Test data`, then only `with step(step_number, ...)` blocks; every page method has a docstring under a `# Scope:` banner (review)
 - [ ] No fixed waits, no `force=True` (B3 searches return nothing)
 - [ ] 0 flaky tests in 3 consecutive runs (B2)
 - [ ] Every failure leaves a trace, screenshot and video
 - [ ] Suite passes with `-n auto`
-- [ ] Secrets (`SAUCE_PASSWORD`, `.auth/`) are never committed
+- [ ] Accounts (`.env`) and sessions (`.auth/`) are never committed
 
 ### Expected results
 
-| Check | Result on the mock store |
+| Check | Result |
 | --- | --- |
 | B3 searches | no matches |
-| 3 runs of `pytest` | 35 passed + 1 xfailed each time, 0 flaky |
+| Serial run + 2 parallel runs (`-n 4`) | 42 passed + 1 xfailed each time, 0 flaky |
 | Forced failure | `trace.zip`, `test-failed-1.png`, `video.webm` in `test-results/` |

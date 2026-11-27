@@ -1,0 +1,8 @@
+{
+  "sorting": [
+    {"id": "name-a-to-z", "option": "Name (A to Z)", "by": "name", "descending": false},
+    {"id": "name-z-to-a", "option": "Name (Z to A)", "by": "name", "descending": true},
+    {"id": "price-low-to-high", "option": "Price (low to high)", "by": "price", "descending": false},
+    {"id": "price-high-to-low", "option": "Price (high to low)", "by": "price", "descending": true}
+  ]
+}

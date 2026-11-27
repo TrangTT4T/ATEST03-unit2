@@ -1,0 +1,17 @@
+{
+  "totals": [
+    {"id": "one-product", "products": ["Sauce Labs Backpack"],
+     "item_total": "$29.99", "tax": "$2.40", "total": "$32.39"},
+    {"id": "two-products", "products": ["Sauce Labs Backpack", "Sauce Labs Bike Light"],
+     "item_total": "$39.98", "tax": "$3.20", "total": "$43.18"},
+    {"id": "every-product", "products": ["Sauce Labs Backpack", "Sauce Labs Bike Light", "Sauce Labs Bolt T-Shirt",
+                                         "Sauce Labs Fleece Jacket", "Sauce Labs Onesie", "Test.allTheThings() T-Shirt (Red)"],
+     "item_total": "$129.94", "tax": "$10.40", "total": "$140.34"}
+  ],
+  "missing_information": [
+    {"id": "no-first-name", "missing": "first_name", "error": "Error: First Name is required"},
+    {"id": "no-last-name", "missing": "last_name", "error": "Error: Last Name is required"},
+    {"id": "no-postal-code", "missing": "postal_code", "error": "Error: Postal Code is required"}
+  ],
+  "order_complete_header": "Thank you for your order!"
+}

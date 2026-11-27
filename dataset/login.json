@@ -1,0 +1,10 @@
+{
+  "rejected": [
+    {"id": "unknown-user", "account": "unknown-user", "error": "Epic sadface: Username and password do not match any user in this service"},
+    {"id": "wrong-password", "account": "wrong-password", "error": "Epic sadface: Username and password do not match any user in this service"},
+    {"id": "locked-out-user", "account": "locked-out-user", "error": "Epic sadface: Sorry, this user has been locked out."},
+    {"id": "missing-username", "account": "missing-username", "error": "Epic sadface: Username is required"},
+    {"id": "missing-password", "account": "missing-password", "error": "Epic sadface: Password is required"}
+  ],
+  "not_logged_in_error": "Epic sadface: You can only access '/inventory.html' when you are logged in."
+}

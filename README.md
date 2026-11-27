@@ -1,25 +1,36 @@
-# Sauce Demo – Unit 2: Playwright End-to-End Automation
+# Swag Labs – Unit 2: Playwright End-to-End Automation
 
-pytest + Playwright (pytest-playwright) · Application under test: https://sauce-demo.myshopify.com
+pytest + Playwright (pytest-playwright) · Application under test: https://www.saucedemo.com (Swag Labs)
 
 Covers Day 5–8. Everything runs with the `pytest` command. The whole unit is documented in one file, with a section per day: `docs/Unit2_Playwright_vi.md` (Tiếng Việt) and `docs/Unit2_Playwright_en.md` (English).
 
-Unit 2 is **plain Playwright**: tests are pytest functions that drive page objects, with no Gherkin layer. Unit 1 (behave + Selenium) is the BDD unit; combining BDD with Playwright is the job of the mock project (Unit 5). What Unit 2 takes over from Unit 1 is the *what* — requirements, risks and test data — not the *how*.
+Unit 2 is **plain Playwright**: tests are pytest functions that drive page objects, with no Gherkin layer. Unit 1 (behave + Selenium) is the BDD unit; combining BDD with Playwright is the job of the mock project (Unit 5). What Unit 2 takes over from Unit 1 is the working method — requirements and risks as markers, test data in files, page objects with locators at the bottom — not the tool.
+
+**Why Swag Labs:** the first version of this unit tested the Shopify store of Unit 1. Its Cloudflare protection and rate limit ("Just a moment...", HTTP 429) stopped the browser tests on some networks, and a bot check is never bypassed. Swag Labs is a demo shop made for test automation: no bot protection, `data-test` attributes on its elements, demo accounts listed on its login page.
 
 | From Unit 1 | In Unit 2 |
 | --- | --- |
-| Requirements REQ-01 … REQ-08 and their risks | Every test carries one requirement marker, e.g. `@pytest.mark.add_to_cart` (declared in `pytest.ini`) |
-| Gherkin tags `@critical` `@smoke` `@negative` | pytest markers with the same names, declared in `pytest.ini` (`--strict-markers`) |
-| `dataset/products.json` | Same file: each product's `path-name` is the last part of its page address (`/products/<path-name>`), never derived from the name (Black heels is `flower-print-jeans`) |
+| Requirements and their risks | Every test carries one requirement marker (e.g. `@pytest.mark.add_to_cart`) and one risk-level marker, declared in `pytest.ini` |
+| Gherkin tags `@critical` `@smoke` `@negative` | pytest markers with the same names (`--strict-markers`) |
+| `dataset/*.json` | One JSON file per area, read with `Helper.read_test_data("<area>")`; parametrized tests run once per case |
 | Page Object pattern, one class per file, plain XPath locators at the bottom, `Helper.by_locator`, custom BasePage methods | Same layout, locators and helper; BasePage methods on Playwright's auto-waiting |
 | Hooks in `environment.py` | Fixtures in `tests/conftest.py` |
 | Screenshot on failure | Trace + screenshot + video on failure |
-| — | Third-party blocking, API tests, saved auth state, parallel runs, flaky reruns |
+| — | Saved auth state, parallel runs, flaky reruns |
+
+| Requirement | Marker | Risk |
+| --- | --- | --- |
+| REQ-01 Add products to the cart | `add_to_cart` | Critical |
+| REQ-02 Remove products from the cart | `update_cart` | Critical |
+| REQ-03 Check out: information, overview totals, order complete | `checkout` | Critical |
+| REQ-04 Correct product information | `product_details` | High |
+| REQ-05 Log in and out securely | `secure_login` | High |
+| REQ-06 Browse and sort the product list | `browse_catalog` | High (list), Medium (sorting) |
 
 | Day | Topic | Section in the unit document | Code used |
 | --- | --- | --- | --- |
-| 5 | Architecture, contexts, locators, fixtures, assertions, isolation | Day 5 section | `pages/`, `tests/conftest.py`, `tests/ui/test_cart.py` … |
-| 6 | Tracing, network control, API testing, auth state, parallel, reporting | Day 6 section | `pytest.ini`, `tests/api/`, `tests/ui/test_auth_state.py` |
+| 5 | Architecture, contexts, locators, fixtures, assertions, isolation | Day 5 section | `pages/`, `tests/conftest.py`, `dataset/`, `tests/test_cart.py` … |
+| 6 | Tracing, known defects (xfail), auth state, parallel, reporting | Day 6 section | `pytest.ini`, `tests/test_auth_state.py` |
 | 7 | Lab: prioritised end-to-end workflows | Day 7 section | full suite |
 | 8 | Revision + reliability, flaky control, stability | Day 8 section | repeated runs, `pytest-rerunfailures`, trace viewer |
 
@@ -27,35 +38,23 @@ Unit 2 is **plain Playwright**: tests are pytest functions that drive page objec
 ATEST03-unit2/
 ├── pytest.ini                   # base_url, tracing, reports, markers (--strict-markers)
 ├── requirements.txt
+├── .env.example                 # the demo account variables to copy into .env (git ignores .env: never pushed)
 ├── dataset/                     # test data, one JSON file per area: Helper.read_test_data("<area>")
-│   ├── products.json            #   7 products: path-name, price, stock status, type, vendor, options
-│   ├── cart.json                #   add / change / remove cases with expected totals
-│   └── search.json              #   matching keywords and keywords with no match
-├── .env.example                 # SAUCE_EMAIL / SAUCE_PASSWORD only, for -m auth (git ignores .env: never pushed)
-├── api/                         # API objects, one class per area like pages/: BaseApi (logged GET/POST),
-│                                #   ProductApi, CartApi, SearchApi (Shopify AJAX API), AccountApi (login, logout,
-│                                #   register, password reset forms), NetworkApi (blocks third-party hosts);
-│                                #   all request handling lives here, tests only call and check
+│   ├── products.json            #   6 products: id, price, description
+│   ├── login.json               #   rejected logins and their errors
+│   ├── catalog.json             #   the 4 sort options
+│   ├── cart.json                #   add / remove cases
+│   └── checkout.json            #   overview totals, required fields and their errors
 ├── pages/                       # Page Objects: one class per file, locator strings at the bottom;
-│                                #   BasePage = find_element(s), click/type/wait methods (timeouts name the step), bot check
+│                                #   BasePage = find_element(s), click/type/select, waits, header, side menu
 ├── tests/
-│   ├── conftest.py              # shared: products, accounts (Faker), step, reports
-│   ├── ui/                      # UI tests: browser + page objects
-│   │   ├── conftest.py          # shop, add_product_and_open_cart, block_third_party, shop_api_in_browser, saved login
-│   │   ├── test_cart.py         # @add_to_cart, @update_cart        (Critical)
-│   │   ├── test_checkout.py     # @start_checkout                   (Critical)
-│   │   ├── test_catalog.py      # @browse_catalog, @product_details (High)
-│   │   ├── test_login.py        # @secure_login: header links, login, logout, password reset (High)
-│   │   ├── test_register.py     # @create_account                   (Medium)
-│   │   ├── test_search.py       # @search_products                  (Medium)
-│   │   └── test_auth_state.py   # saved login (needs a real account)
-│   └── api/                     # API tests: no browser
-│       ├── conftest.py          # shop_api: shop_api.product / .cart / .search
-│       ├── test_product_api.py  # @product_details
-│       ├── test_cart_api.py     # @add_to_cart, @update_cart (+ finding A1)
-│       ├── test_search_api.py   # @search_products
-│       └── test_account_api.py  # @secure_login, @create_account (login, logout, register)
-├── helper_utility/helpers.py    # class Helper: by_locator(), read_test_data(), money_to_float/pence(), random_customer() (Faker)
+│   ├── conftest.py              # products, accounts (.env + Faker), shop, logged_in_shop, fill_cart, saved login, step
+│   ├── test_login.py            # @secure_login                     (High)
+│   ├── test_catalog.py          # @browse_catalog, @product_details (High; sorting Medium)
+│   ├── test_cart.py             # @add_to_cart, @update_cart        (Critical; + finding F1)
+│   ├── test_checkout.py         # @checkout                         (Critical)
+│   └── test_auth_state.py       # @secure_login: saved login + isolation check
+├── helper_utility/helpers.py    # class Helper: by_locator(), read_test_data(), money_to_float(), Faker data
 ├── helper_utility/steps.py      # the `step` fixture: numbered steps -> Allure step + trace group
 └── docs/Unit2_Playwright_vi.md, Unit2_Playwright_en.md
 ```
@@ -66,52 +65,54 @@ Requires **Python 3.12**: the version in `.python-version` (PyCharm, VS Code, py
 
 ```bash
 pip install -r requirements.txt
-cp .env.example .env                 # only for -m auth: a real account (other tests make up accounts with Faker)
 playwright install chromium
-pytest                               # 29 UI + 31 API tests; manual/data_creating/auth excluded
-pytest tests/api                     # the API tests only (no browser, about 5 s)
-pytest tests/ui                      # the UI tests only
-pytest -m smoke
+cp .env.example .env                 # fill in the demo accounts shown on https://www.saucedemo.com
+pytest                               # 43 tests: 42 pass, 1 xfail (finding F1)
+pytest -m smoke                      # login, add to cart, complete an order
 pytest -m critical                   # every Critical-risk test
 pytest -m add_to_cart                # every test of one requirement
+pytest tests/test_checkout.py        # one area
 pytest -n auto                       # parallel
-pytest -m auth                       # needs SAUCE_EMAIL / SAUCE_PASSWORD
-pytest tests/ui/test_cart.py --headed --slowmo 300
+pytest tests/test_cart.py --headed --slowmo 300
 playwright show-trace test-results/<test>/trace.zip
 ```
 
+Without `.env`, every test that needs an account is skipped and the end of the run names the variables to set.
+
 ## Page objects
 
-Locators are plain XPath strings that describe the element (`"//*[@id='cart']"`, `"//*[@itemprop='name']"`, `"//a[normalize-space()='Forgot your password?']"`), declared at the bottom of each page class under a comment naming the area of the page; a template uses `{}` and `.format()`. `Helper.by_locator()` (`helper_utility/helpers.py`, the same prefixes as Unit 1) turns them into Playwright selectors. Pages never touch `self.page`: they call the `BasePage` methods (`find_element`, `find_elements`, `click_element`, `type_text`, `click_and_wait_for_response` …), which log the action. No method returns the page for chaining. Details: Day 5 section 3 of the unit document.
+Locators are plain XPath strings that describe the element — mostly Swag Labs' `data-test` attributes (`"//*[@data-test='checkout']"`, `"//*[@data-test='shopping-cart-badge']"`) — declared at the bottom of each page class under a comment naming the area of the page; a template uses `{}` and `.format()`. `Helper.by_locator()` (`helper_utility/helpers.py`, the same prefixes as Unit 1) turns them into Playwright selectors. Pages never touch `self.page`: they call the `BasePage` methods (`find_element`, `find_elements`, `get_texts`, `click_element`, `type_text`, `select_option` …), which log the action. Swag Labs is a single-page app, so a click that changes the page waits for the new address. No method returns the page for chaining. Details: Day 5 section 3 of the unit document.
 
 ## How a test reads
 
-Every test: a docstring, `# Test data`, then `# Execution steps` made only of `with step(step_number, "..."):` blocks: `step_number = 1` before the first step, `step_number += 1` before each next one (the `step` fixture stops the test if a number is skipped or repeated). Steps show up in the Allure report, in the Playwright trace and in the error message of a failure (`failed in Step 3: ...`). Page methods are grouped under `####` banners with `# Scope: <area of the page>`, each with a docstring; locators stay at the bottom. Framework tests enforce both.
+Every test: a docstring, `# Test data`, then `# Execution steps` made only of `with step(step_number, "..."):` blocks: `step_number = 1` before the first step, `step_number += 1` before each next one (the `step` fixture stops the test if a number is skipped or repeated). Steps show up in the Allure report, in the Playwright trace and in the error message of a failure (`failed in Step 3: ...`). Page methods are grouped under `####` banners with `# Scope: <area of the page>`, each with a docstring; locators stay at the bottom.
 
 ```python
 @pytest.mark.smoke
 @pytest.mark.add_to_cart
-def test_add_an_in_stock_product_to_the_cart(shop, products, step):
-    """A customer adds one in-stock product: the cart shows 1 item at the product's price."""
+def test_add_one_product_to_the_cart(logged_in_shop, products, step):
+    """A customer adds one product: the badge shows 1, the button turns into Remove, the cart lists it."""
     # Test data
-    grey_jacket = products["Grey jacket"]
+    backpack = "Sauce Labs Backpack"
 
     # Execution steps
     step_number = 1
-    with step(step_number, "Open the product page of Grey jacket"):
-        shop.product.open_product_page(grey_jacket["path-name"])
+    with step(step_number, f"Add {backpack} from the products page"):
+        logged_in_shop.inventory.add_product_to_cart(backpack)
     step_number += 1
-    with step(step_number, "Add 1 item to the cart"):
-        shop.product.add_to_cart(1)
+    with step(step_number, "Verify the cart badge shows 1 and the button says Remove"):
+        expect(logged_in_shop.inventory.cart_badge).to_have_text("1")
+        expect(logged_in_shop.inventory.cart_button(backpack)).to_have_text("Remove")
     step_number += 1
-    with step(step_number, f"Verify the cart has 1 item, total {grey_jacket['price']}"):
-        shop.cart.open_page()
-        verify_cart_contents(shop.cart, 1, grey_jacket["price"])
+    with step(step_number, f"Open the cart and verify it holds {backpack} at {products[backpack]['price']}"):
+        logged_in_shop.inventory.open_cart()
+        assert logged_in_shop.cart.get_product_names() == [backpack]
+        assert logged_in_shop.cart.get_product_price(backpack) == products[backpack]["price"]
 ```
 
 ## Test data
 
-No test writes its own values: each area has a JSON file in `dataset/` (`products.json`, `cart.json`, `search.json`), read with `Helper.read_test_data("<area>")`, and a parametrized test runs once per case: a new case is a new line in the file. Accounts are made up by Faker for every test (`Helper.random_customer()`), so no email or password is written in any file; only `pytest -m auth` reads a real account from `.env`. Details: Day 5 section 4b of the unit document.
+No test writes its own values: each area has a JSON file in `dataset/`, read with `Helper.read_test_data("<area>")`, and a parametrized test runs once per case: a new case is a new line in the file. The demo accounts live in `.env` (never pushed); everything else — an unknown username, a wrong password, the checkout customer — is made up by Faker for every test. Details: Day 5 section 4b of the unit document.
 
 ## Reports
 
@@ -124,14 +125,12 @@ Every run writes:
 | Allure results: numbered steps, docstring, markers as tags | `reports/allure-results/` (`allure serve reports/allure-results`, needs the Allure CLI) | trainer, BA, PO |
 | Trace, screenshot, video of failed tests | `test-results/` | debugging |
 
-Every test carries one requirement marker (`@pytest.mark.add_to_cart` …, declared in `pytest.ini`): `pytest -m add_to_cart` runs one requirement, and the markers appear in the HTML report. `--strict-markers` rejects a marker typo such as `add_to_card`.
+`--strict-markers` rejects a marker typo such as `add_to_card`.
 
-## Known limits of the public demo store
+## Known defect
 
-- **Login and registration forms are MANUAL** (`@pytest.mark.manual`): the store's bot protection (CAPTCHA) stops them — no request is sent and no error is shown — so a wrong-password test could only fail. The tests are complete; run them with `pytest -m manual` in a test environment without CAPTCHA. Opening the password-reset form is automated.
-- **The theme needs jQuery from `ajax.googleapis.com`**: `block_third_party` allows that one host, otherwise the product page never renders its "Sold Out" button and Add to Cart falls back to a full-page form post. Tracking hosts stay blocked.
-- **Rate limit and bot check**: many runs in a short time from one network make the store answer Add to Cart with HTTP 429 and then show its Cloudflare check ("Just a moment..."). The test then stops at once and is reported **SKIPPED** with the reason (`StoreBlockedError`, listed at the end of the run), not FAILED: the store did not answer, so nothing was checked. The check is never bypassed (its script from `challenges.cloudflare.com` is let through only so it works as in any browser). Wait a few minutes, then run again serially, or one folder at a time (`pytest tests/api`, then `pytest tests/ui`).
-- Never commit `.auth/`.
+- **F1 — Reset App State leaves the buttons as "Remove":** after Reset App State the cart is empty, but the product's button still says "Remove". `test_reset_app_state_empties_the_cart_and_resets_the_buttons` states the expected behaviour and is marked `xfail(strict=True)`: it shows as a known defect, and when Swag Labs fixes it the run fails so the marker is removed.
+- Never commit `.env` or `.auth/`.
 
 ## ATEST03 course repositories
 

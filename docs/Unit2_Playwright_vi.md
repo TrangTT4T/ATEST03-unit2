@@ -1,64 +1,77 @@
-# Unit 2 – Playwright End-to-End Automation (Sauce Demo)
+# Unit 2 – Tự động hoá End-to-End với Playwright (Swag Labs)
 
-pytest + Playwright (pytest-playwright) · Website kiểm thử: https://sauce-demo.myshopify.com · Code: `ATEST03-unit2/`
+pytest + Playwright (pytest-playwright) · Ứng dụng được test: https://www.saucedemo.com (Swag Labs) · Code: `ATEST03-unit2/`
 
-Unit 2 là Playwright thuần: tự động hóa cùng các yêu cầu, rủi ro và dữ liệu test của Unit 1 bằng test pytest gọi page object, không có lớp Gherkin (BDD là chủ đề của Unit 1; BDD kết hợp Playwright là mock project ở Unit 5). Test được xây ở Day 5; thêm tracing, kiểm soát network, lưu phiên đăng nhập, chạy song song (Day 6); áp dụng cho các luồng ưu tiên trong bài lab (Day 7); và làm cho ổn định bằng phân tích lỗi và kiểm soát flaky (Day 8). Mọi thứ chạy bằng lệnh `pytest`.
+Unit 2 dùng Playwright thuần: test pytest điều khiển page object, không có lớp Gherkin (BDD là chủ đề của Unit 1; BDD trên Playwright là mock project ở Unit 5). Bộ test được dựng ở Day 5, sau đó có thêm tracing, lưu phiên đăng nhập và chạy song song (Day 6), được áp vào các luồng ưu tiên trong buổi lab (Day 7), và được làm cho ổn định bằng phân tích lỗi và kiểm soát test chập chờn (Day 8). Mọi thứ chạy bằng lệnh `pytest`.
 
-| Day | Nội dung | LO | Hình thức | Phút | Format |
+Vì sao dùng Swag Labs: phiên bản đầu của unit này test store Shopify của Unit 1 (sauce-demo.myshopify.com). Lớp bảo vệ Cloudflare và giới hạn request của store đó (HTTP 429, "Just a moment...") chặn các test trình duyệt trên một số mạng, mà kiểm tra chống bot thì không bao giờ được vượt qua. Swag Labs là shop demo làm ra để luyện test tự động: không chặn bot, không giới hạn request, các phần tử có thuộc tính `data-test`, tài khoản demo ghi sẵn trên trang đăng nhập.
+
+| Ngày | Nội dung | LO | Hình thức | Phút | Định dạng |
 | --- | --- | --- | --- | --- | --- |
-| Day 5 | Kiến trúc Playwright, browser context, locator, fixture, assertion, cô lập | LO3 | Concept/Lecture | 120 | Virtual |
-| Day 6 | Tracing, chặn/giả lập network, trạng thái đăng nhập, chạy song song, mẫu báo cáo | LO3 | Concept/Lecture | 120 | Virtual |
-| Day 7 | Lab Playwright: tự động hóa luồng E2E ưu tiên với fixture, tracing, kiểm soát network | LO3 | Assignment/Lab | 150 | Hybrid |
-| Day 8 | Ôn tập chủ đề | LO3 | Guides/Review | 60 | Virtual |
-| Day 8 | Độ tin cậy và bảo trì: phân tích lỗi, kiểm soát flaky, chẩn đoán bằng trace, ổn định | LO3 | Concept/Lecture | 120 | Virtual |
+| Day 5 | Kiến trúc Playwright, browser context, locator, fixture, assertion, cô lập test | LO3 | Concept/Lecture | 120 | Virtual |
+| Day 6 | Tracing, trạng thái đăng nhập, chạy song song, mẫu báo cáo | LO3 | Concept/Lecture | 120 | Virtual |
+| Day 7 | Lab Playwright: các luồng end-to-end ưu tiên với fixture và tracing | LO3 | Assignment/Lab | 150 | Hybrid |
+| Day 8 | Ôn tập | LO3 | Guides/Review | 60 | Virtual |
+| Day 8 | Độ tin cậy và khả năng bảo trì: phân tích lỗi, kiểm soát test chập chờn, chẩn đoán bằng trace, độ ổn định | LO3 | Concept/Lecture | 120 | Virtual |
 
-Nội dung: Day 5 – Kiến trúc · Day 6 – Tracing, network, đăng nhập, song song · Day 7 – Lab · Day 8 – Ôn tập + độ tin cậy
+Nội dung: Day 5 – Kiến trúc · Day 6 – Tracing, đăng nhập, song song · Day 7 – Lab · Day 8 – Ôn tập + độ tin cậy
 
 ```text
 ATEST03-unit2/
 ├── pytest.ini                   # base_url, tracing, báo cáo, marker (--strict-markers)
 ├── requirements.txt
+├── .env.example                 # SWAG_USERNAME, SWAG_LOCKED_OUT_USERNAME, SWAG_PASSWORD; chép thành .env (git bỏ qua)
 ├── dataset/                     # dữ liệu test, mỗi khu vực một file JSON (Helper.read_test_data("<khu vực>"))
-│   ├── products.json            #   7 sản phẩm: path-name, giá, tình trạng hàng, loại, hãng, option
-│   ├── cart.json                #   các ca thêm / đổi số lượng / xoá, kèm tổng tiền mong đợi
-│   └── search.json              #   từ khoá có kết quả (chữ hoa, một phần của từ ...) và từ khoá không có kết quả
-├── .env.example                 # chỉ SAUCE_EMAIL / SAUCE_PASSWORD (pytest -m auth); git bỏ qua .env nên không bao giờ bị push
-├── api/                         # API object, mỗi khu vực một class như pages/: BaseApi, ProductApi, CartApi, SearchApi, AccountApi
-├── pages/                       # Page Object Playwright (chuyển từ Unit 1): mỗi file một class
-└── tests/
-    ├── conftest.py              # dùng chung: products, accounts (Faker), step, báo cáo
-    ├── ui/                      # test giao diện (trình duyệt + page object); conftest: shop, kiểm soát network, đăng nhập
-    │   ├── test_cart.py  test_checkout.py  test_catalog.py
-    │   ├── test_login.py test_register.py  test_search.py   # mỗi khu vực một file, mỗi yêu cầu một marker
-    │   └── test_auth_state.py   # phiên đăng nhập đã lưu + kiểm tra cô lập
-    └── api/                     # test API (không trình duyệt); conftest: shop_api
-        └── test_product_api.py  test_cart_api.py  test_search_api.py
-helper_utility/helpers.py        # class Helper: by_locator() = locator string -> Playwright selector
-helper_utility/steps.py          # fixture `step`: bước đánh số -> bước Allure + nhóm trong trace
+│   ├── products.json            #   6 sản phẩm: id, giá, mô tả
+│   ├── login.json               #   các lần đăng nhập bị từ chối và thông báo lỗi
+│   ├── catalog.json             #   4 cách sắp xếp
+│   ├── cart.json                #   các ca thêm / xoá
+│   └── checkout.json            #   tổng tiền ở trang overview (item total, thuế, total), trường bắt buộc và lỗi
+├── pages/                       # Page Object: mỗi file một class, locator XPath ở cuối class
+│   ├── base_page.py             #   BasePage: find_element(s), click/type/select, chờ, header, menu bên
+│   ├── login_page.py  inventory_page.py  product_page.py  cart_page.py
+│   └── checkout_information_page.py  checkout_overview_page.py  checkout_complete_page.py
+├── tests/
+│   ├── conftest.py              # fixture: products, accounts, shop, logged_in_shop, fill_cart, phiên đã lưu, step
+│   ├── test_login.py  test_catalog.py  test_cart.py  test_checkout.py   # mỗi khu vực một file
+│   └── test_auth_state.py       # phiên đăng nhập đã lưu + kiểm tra cô lập
+├── helper_utility/helpers.py    # class Helper: by_locator(), read_test_data(), money_to_float(), dữ liệu Faker
+└── helper_utility/steps.py      # fixture `step`: bước đánh số -> bước Allure + nhóm trong trace
 ```
+
+### Yêu cầu và rủi ro
+
+| Yêu cầu | Marker | Rủi ro | Mức |
+| --- | --- | --- | --- |
+| REQ-01 Thêm sản phẩm vào giỏ | `add_to_cart` | R01 Giỏ hàng sai | Critical |
+| REQ-02 Xoá sản phẩm khỏi giỏ | `update_cart` | R01 Giỏ hàng sai | Critical |
+| REQ-03 Checkout: thông tin, tổng tiền, hoàn tất đơn | `checkout` | R02 Sai tổng tiền hoặc mất đơn | Critical |
+| REQ-04 Thông tin sản phẩm đúng | `product_details` | R03 Trang sản phẩm khác danh sách | High |
+| REQ-05 Đăng nhập, đăng xuất an toàn | `secure_login` | R04 Người không có quyền vào được, hoặc người dùng hợp lệ không vào được | High |
+| REQ-06 Xem và sắp xếp danh sách sản phẩm | `browse_catalog` | R05 Sai tên hoặc giá trong danh sách (High); R07 Sắp xếp sai (Medium) | High / Medium |
 
 ---
 
-## Day 5 – Playwright Architecture: Browser Contexts, Locators, Fixtures, Assertions & Isolation
+## Day 5 – Kiến trúc Playwright: Browser Context, Locator, Fixture, Assertion & Cô lập
 
 Unit 2 · LO3 · Concept/Lecture · 120 phút · Virtual
 
-Unit 2 giữ CÁI GÌ Unit 1 kiểm thử (yêu cầu, rủi ro, dữ liệu) và đổi CÁCH LÀM: test pytest thuần gọi page object Playwright, marker thay cho tag Gherkin, fixture của pytest thay cho hook của behave.
+Unit 2 giữ cách làm của Unit 1 (yêu cầu, rủi ro, file dữ liệu, page object) và đổi công cụ: test pytest thuần điều khiển page object Playwright, marker thay tag Gherkin, fixture pytest thay hook của behave.
 
-### 1. Kế thừa từ Unit 1 và phần mới
+### 1. Phần kế thừa từ Unit 1, phần mới
 
 | Unit 1 (behave + Selenium) | Unit 2 (pytest + Playwright) | Trạng thái |
 | --- | --- | --- |
-| `tests/features/*.feature` (14 scenario) | Mỗi scenario thành một test pytest trong `tests/ui/test_<khu_vực>.py`; bảng Examples thành `@pytest.mark.parametrize` | Viết lại thành test thường |
+| Các scenario `*.feature` | Mỗi scenario là một test pytest trong `tests/test_<khu_vực>.py`; bảng Examples thành `@pytest.mark.parametrize` trên file dữ liệu | Viết lại thành test thuần |
 | Tag yêu cầu `@add_to_cart` … | Marker `@pytest.mark.add_to_cart` …, khai báo trong `pytest.ini` | Kế thừa |
-| `dataset/products.json` | Cùng file, thêm loại, hãng, option; thêm `cart.json`, `search.json` | Kế thừa và mở rộng |
-| Tag `@critical`, `@smoke`, `@negative` | Cùng tên, thành marker pytest: `pytest -m smoke`; khu vực là file: `pytest tests/ui/test_cart.py` | Kế thừa |
-| Page Object (`pages/`) | Cùng tên class, dùng `Locator` của Playwright thay `WebElement` | Chuyển đổi |
-| Hook trong `tests/environment.py` | Fixture trong `tests/conftest.py` | Thay thế |
-| Explicit wait `WebDriverWait` | Action tự chờ + `expect()` tự thử lại | Thay thế |
-| Trình duyệt mới mỗi scenario | **Browser context** mới mỗi test (rẻ hơn nhiều) | Cải tiến |
-| Ảnh khi fail | Ảnh + video + **trace** khi fail | Mở rộng (Day 6) |
-| — | Chặn/giả lập network, lưu phiên đăng nhập, chạy song song | Mới (Day 6) |
+| `dataset/*.json` | Mỗi khu vực một file JSON, đọc bằng `Helper.read_test_data("<khu vực>")` | Kế thừa |
+| Tag `@critical`, `@smoke`, `@negative` | Marker cùng tên: `pytest -m smoke`; khu vực là file: `pytest tests/test_cart.py` | Kế thừa |
+| Page Object, locator XPath ở cuối class, `Helper.by_locator` | Cùng bố cục; `Locator` của Playwright thay `WebElement` | Chuyển sang |
+| Hook trong `environment.py` | Fixture trong `tests/conftest.py` | Thay thế |
+| Chờ tường minh `WebDriverWait` | Thao tác tự chờ + `expect()` tự thử lại | Thay thế |
+| Trình duyệt mới cho mỗi scenario | **Browser context** mới cho mỗi test (rẻ hơn nhiều) | Cải tiến |
+| Chụp màn hình khi fail | Ảnh + video + **trace** khi fail | Mở rộng (Day 6) |
+| — | Lưu phiên đăng nhập, chạy song song | Mới (Day 6) |
 
 ### 2. Kiến trúc Playwright
 
@@ -66,87 +79,90 @@ Unit 2 giữ CÁI GÌ Unit 1 kiểm thử (yêu cầu, rủi ro, dữ liệu) v�
 pytest session
 └── playwright  (tiến trình driver, mỗi worker một cái)
     └── browser  (Chromium / Firefox / WebKit, mỗi worker một cái, scope session)
-        └── context  (mỗi test một cái: cookie, cache, storage riêng → cô lập)
+        └── context  (mỗi test một cái: cookie, localStorage riêng → đăng nhập riêng, giỏ riêng)
             └── page  (mỗi test một tab)
 ```
 
-Tạo context chỉ mất vài mili giây, nên mỗi test có giỏ hàng sạch mà không cần khởi động lại trình duyệt. Ở Unit 1, muốn cô lập như vậy phải mở Chrome mới cho mỗi scenario.
+Tạo một context chỉ mất vài mili giây, nên test nào cũng bắt đầu ở trạng thái chưa đăng nhập, giỏ trống, mà không phải mở lại trình duyệt. Swag Labs giữ đăng nhập trong cookie (`session-username`) và giỏ hàng trong localStorage (`cart-contents`): cả hai thuộc về context, nên không test nào thấy giỏ của test khác.
 
 ### 3. Locator
 
-| Ưu tiên | Locator (XPath trơn) | Ví dụ trong `pages/` |
+Swag Labs gắn thuộc tính `data-test` lên các phần tử, làm riêng cho test tự động. Thuộc tính này không đổi khi bố cục hay chữ trên trang thay đổi, nên được ưu tiên trước:
+
+| Ưu tiên | Locator (XPath) | Ví dụ trong `pages/` |
 | --- | --- | --- |
-| 1 | Id | `//*[@id='cart']`, `//*[@id='checkout']`, `//*[@id='product-price']` |
-| 2 | Thuộc tính ngữ nghĩa | `//*[@itemprop='name']` (tên sản phẩm: `<h1>` đầu tiên của trang là logo) |
-| 3 | Chữ | `//a[normalize-space()='Forgot your password?']`, `//*[contains(text(),'No results found for')]` |
-| 4 | Thuộc tính ổn định / action của form | `//form[contains(@action,'/cart/add')]//*[@type='submit']`, `//input[@type='submit' and @value='Sold Out']` |
-| 5 | Giới hạn trong phần tử cha | `//*[@id='cart']//input[starts-with(@name,'updates')]` — giới hạn trong `#cart` vì trang nào cũng có mini-cart ẩn lặp lại các dòng đó |
-| Không dùng | Theo vị trí | `(//a)[3]`, `//div[2]/a` |
+| 1 | Thuộc tính `data-test` | `//*[@data-test='checkout']`, `//*[@data-test='shopping-cart-badge']`, `//*[@data-test='error']` |
+| 2 | Id | `//*[@id='react-burger-menu-btn']` (nút menu không có `data-test`) |
+| 3 | Giới hạn trong phần tử cha theo chữ | `//*[@data-test='inventory-item'][.//*[@data-test='inventory-item-name' and normalize-space()='{}']]//button` — nút của một thẻ sản phẩm |
+| 4 | Chữ trên nút, trong phạm vi đó | `…//button[normalize-space()='Remove']` |
+| Không bao giờ | Vị trí | `(//button)[3]`, `//div[2]/a` |
 
-#### Locator và các method tự viết của BasePage (cùng khung với Unit 1)
+#### Locator và các method riêng của BasePage (cùng bố cục với Unit 1)
 
-Locator là chuỗi XPath trơn mô tả element, gom dưới comment ghi khu vực của trang; template dùng `{}` và `.format()`:
+Locator là chuỗi XPath mô tả phần tử, gom dưới một dòng comment ghi khu vực của trang; locator dạng mẫu dùng `{}` và `.format()`:
 
 ```python
     # --- Locators -------------------------------------------------------------
-    # Cart table (inside #cart; the hidden mini-cart drawer repeats every row)
-    _cart_form = "//*[@id='cart']"
-    _quantity_boxes = "//*[@id='cart']//input[starts-with(@name,'updates')]"
+    # Cart items. .format(product_name): the line whose name is exactly product_name
+    _item_names = "//*[@data-test='cart-list']//*[@data-test='inventory-item-name']"
+    _item_line = "//*[@data-test='cart-list']//*[@data-test='inventory-item'][.//*[normalize-space()='{}']]"
+    _remove_button = _item_line + "//button[normalize-space()='Remove']"
     # Cart buttons
-    _update_button = "//*[@id='update']"
-    _checkout_button = "//*[@id='checkout']"
+    _continue_shopping_button = "//*[@data-test='continue-shopping']"
+    _checkout_button = "//*[@data-test='checkout']"
 ```
 
-`Helper.by_locator()` (`helper_utility/helpers.py`, cùng bộ prefix với Unit 1) đổi locator thành selector của Playwright:
+`Helper.by_locator()` (`helper_utility/helpers.py`, cùng các prefix như Unit 1) đổi locator thành selector của Playwright:
 
 | Locator | Selector Playwright |
 | --- | --- |
-| `//*[@id='cart']` (không prefix: cách các page đang viết) | `xpath=//*[@id='cart']` |
-| `id=cart` hoặc `id:cart` | `id=cart` |
-| `name=q` | `xpath=//*[@name='q']` |
-| `link=Forgot your password?` / `partial link=password` | `xpath=//a[normalize-space()='…']` / `xpath=//a[contains(normalize-space(),'…')]` |
-| `css=#cart`, `tag_name=h1`, `class_name=errors`, `xpath=//h1` | `css=#cart`, `css=h1`, `css=.errors`, `xpath=//h1` |
+| `//*[@data-test='checkout']` (không prefix: cách page viết) | `xpath=//*[@data-test='checkout']` |
+| `id=checkout` hoặc `id:checkout` | `id=checkout` |
+| `name=user-name` | `xpath=//*[@name='user-name']` |
+| `link=About` / `partial link=Abo` | `xpath=//a[normalize-space()='…']` / `xpath=//a[contains(normalize-space(),'…')]` |
+| `css=#checkout`, `tag_name=h3`, `class_name=error`, `xpath=//h3` | `css=#checkout`, `css=h3`, `css=.error`, `xpath=//h3` |
 | `foo=bar` | `ValueError: Element locator with prefix 'foo' is not supported: 'foo=bar'` |
 
-Page không gọi `self.page`: page gọi các method của `BasePage`. Các method này ghi log thao tác (hiện trong báo cáo của test fail, mật khẩu ghi là `***`):
+Page không bao giờ gọi `self.page`: page gọi các method của `BasePage`, các method này ghi log thao tác (hiện trong báo cáo của test fail, mật khẩu hiện `***`):
 
 | Nhóm | Method |
 | --- | --- |
-| Điều hướng | `open_page(path)`, `wait_until_url_contains(fragment)` |
-| Locator | `find_element(locator)` (phần tử đầu), `find_elements(locator)` (mọi phần tử) — locator của Playwright, lười: chờ khi có thao tác hoặc `expect()` dùng tới |
-| Thao tác | `click_element`, `click_and_wait_for_new_page` (nút submit form), `click_and_wait_for_response(locator, url_part=)` (AJAX), `type_text(locator, text, secret=False)` |
-| Trạng thái | `is_element_visible(locator, timeout=0)` — chờ trạng thái tối đa `timeout` giây, không ngủ cố định |
-| Header | `header_cart_link`, `search_for(keyword)` |
+| Điều hướng | `open_page(path)`, `wait_until_url_contains(fragment)`, `wait_until_url_ends_with(suffix)` |
+| Locator | `find_element(locator)` (phần tử đầu), `find_elements(locator)` (mọi phần tử), `get_texts(locator)` — locator của Playwright là lazy: chỉ chờ khi một thao tác hay `expect()` dùng đến |
+| Thao tác | `click_element`, `type_text(locator, text, secret=False)`, `select_option(locator, label)` |
+| Trạng thái | `is_element_visible(locator, timeout=0)` — chờ trạng thái tối đa `timeout` giây, không bao giờ sleep cố định |
+| Header | `page_title`, `cart_badge`, `get_cart_badge_count()`, `open_cart()` |
+| Menu bên | `logout()`, `reset_app_state()` |
 
-Không method nào trả về page để gọi nối tiếp: mở trang rồi dùng, viết hai dòng. Chỉ giữ method mà page hoặc test có dùng.
+Swag Labs là ứng dụng một trang (single-page app): bấm nút thì địa chỉ đổi mà không tải trang mới. Vì vậy page chờ địa chỉ (`wait_until_url_contains("/cart.html")`), không chờ tải trang. Mọi thao tác chờ và thao tác chính chạy trong `_report_timeout()`: khi Playwright hết thời gian chờ thì log một dòng ERROR và nói test đang làm gì, ở trang nào ("Clicking '//*[@data-test='checkout']' timed out on https://www.saucedemo.com/cart.html"), kèm call log của Playwright.
 
-Các quy tắc bố cục này được kiểm trong review (Day 8, checklist B4): locator mà `Helper.by_locator()` không nhận sẽ làm test đầu tiên dùng nó fail, kèm locator trong thông báo.
+Không method nào trả về page để gọi nối tiếp: gọi method rồi dùng page, viết hai dòng. Chỉ giữ method mà page hoặc test có dùng.
 
 ### 4. Fixture (`tests/conftest.py`)
 
 | Fixture | Scope | Thay cho phần nào ở Unit 1 | Làm gì |
 | --- | --- | --- | --- |
 | `browser`, `context`, `page` | session / test / test | `before_scenario` + `after_scenario` | pytest-playwright cung cấp |
-| `browser_context_args` | session | option trong `_make_driver()` | Viewport 1366×900, locale en-GB |
+| `browser_context_args` | session | option trong `_make_driver()` | Viewport 1366×900, locale en-US |
 | `products` | session | `before_all` đọc JSON | `Helper.read_test_data("products")` |
-| `accounts` | test | — | Tài khoản theo tên (`unknown-user`, `new-customer`, `customer-without-email`, `malformed-email`), Faker tạo mới cho mỗi test: không email hay mật khẩu nào nằm trong file |
-| `shop` | test | `Helper.create_page_object()` | Mọi Page Object gắn với page của test |
-| `add_product_and_open_cart` | test | code của step Given | Factory: `add_product_and_open_cart("Noir jacket", 2)` |
-| `block_third_party` | test, autouse | — | Kiểm soát network (Day 6) |
-| `saved_login_state` | session | — | Lưu trạng thái đăng nhập (Day 6) |
+| `swag_accounts` | session | — | Tài khoản demo trong `.env` (`standard-user`, `locked-out-user`); thiếu `.env` thì bỏ qua test với thông báo rõ ràng |
+| `accounts` | test | — | Mọi lần đăng nhập trong `dataset/login.json` theo tên: tài khoản demo + tài khoản bịa bằng Faker: `unknown-user`, `wrong-password`, `missing-username`, `missing-password` |
+| `checkout_information` | test | — | Khách hàng bịa cho form checkout (Faker) |
+| `shop` | test | `Helper.create_page_object()` | Mọi Page Object gắn với page của test: `shop.login`, `shop.inventory`, `shop.cart` … |
+| `logged_in_shop` | test | step `Given I am logged in` | `shop`, đã đăng nhập bằng standard user, đang ở trang sản phẩm |
+| `fill_cart` | test | step `Given ... in the cart` | Factory: `fill_cart(["Sauce Labs Backpack", "Sauce Labs Onesie"])` |
+| `saved_login_state` | session | — | Lưu phiên đăng nhập (Day 6) |
+| `step` | test | — | Bước đánh số (mục 5) |
 
 ```python
 @pytest.fixture
-def add_product_and_open_cart(shop, products):
-    """Factory fixture: add_product_and_open_cart("Noir jacket", 2) puts 2 Noir jackets in this test's cart."""
-    def _add(name: str, quantity: int = 1):
-        shop.product.open_product_page(products[name]["path-name"])
-        shop.product.add_to_cart(quantity)
-        shop.cart.open_page()
-        return shop.cart
-    return _add
+def fill_cart(logged_in_shop):
+    """Factory fixture: fill_cart(["Sauce Labs Backpack", ...]) adds the products from the products page."""
+    def add_products(product_names: list[str]):
+        logged_in_shop.inventory.add_products_to_cart(product_names)
+        return logged_in_shop
+    return add_products
 ```
-
 
 ### 4b. Dữ liệu test (`dataset/`) và dữ liệu sinh ngẫu nhiên (Faker)
 
@@ -154,62 +170,64 @@ Test không tự chứa giá trị: mỗi khu vực một file JSON, đọc bằ
 
 | File | Chứa | Dùng ở |
 | --- | --- | --- |
-| `products.json` | 7 sản phẩm: `path-name`, `price`, `status`, `type`, `vendor`, `options` (Size, Color …) | fixture `products`: test catalog, sản phẩm, giỏ hàng, product API |
-| `cart.json` | `add` (sản phẩm × số lượng → tổng), `change` (từ → thành → tổng), `remove` | `test_cart.py`, `test_cart_api.py` (cùng các ca trên trình duyệt và qua API) |
-| `search.json` | `matching` (từ khoá → sản phẩm mong đợi: "jacket", "JACKET", "jack", "sandals", "heels"), `no_match` ("zzqqxx", "<script>") | `test_search.py`, `test_search_api.py` |
+| `products.json` | 6 sản phẩm: `id` (trang sản phẩm là `/inventory-item.html?id=<id>`), `price`, `description` | fixture `products`: danh sách, trang sản phẩm, giỏ, sắp xếp |
+| `login.json` | `rejected`: tên tài khoản → lỗi (user không tồn tại, sai mật khẩu, user bị khoá, thiếu username, thiếu mật khẩu); lỗi "chưa đăng nhập" | `test_login.py`, `test_auth_state.py` |
+| `catalog.json` | `sorting`: 4 lựa chọn, sắp theo tên hoặc giá, tăng hoặc giảm | `test_catalog.py` |
+| `cart.json` | `add` (danh sách sản phẩm), `remove` (sản phẩm + món cần xoá) | `test_cart.py` |
+| `checkout.json` | `totals` (sản phẩm → item total, thuế 8%, total), `missing_information` (trường để trống → lỗi), tiêu đề xác nhận đơn | `test_checkout.py` |
 
 ```python
 CART = Helper.read_test_data("cart")
 
 @pytest.mark.parametrize("case", CART["add"], ids=[case["id"] for case in CART["add"]])
-def test_cart_total_equals_price_times_quantity(add_product_and_open_cart, step, case):
+def test_add_products_to_the_cart(fill_cart, step, case):
     ...
 ```
 
-Dữ liệu tài khoản không bao giờ nằm trong file: fixture `accounts` dùng Faker tạo tài khoản mới cho mỗi test (`Helper.random_customer()`: tên, email `…@example.com` không trùng, mật khẩu mạnh; `random_unregistered_login()`, `random_malformed_email()`). Chỉ tài khoản thật cho `pytest -m auth` lấy từ `.env`.
+Dữ liệu tài khoản không bao giờ nằm trong file được đẩy lên GitHub. Tài khoản demo của Swag Labs (ghi trên trang đăng nhập) nằm trong `.env`, git bỏ qua file này; `.env.example` chỉ có tên biến. Mọi dữ liệu khác do Faker tạo mới cho mỗi test: username không tồn tại, mật khẩu sai, khách hàng khi checkout.
 
-`Helper` (`helper_utility/helpers.py`) là phần dùng chung của page, API object và test:
+`Helper` (`helper_utility/helpers.py`) là phần dùng chung của page và test:
 
 | Nhóm | Method |
 | --- | --- |
 | Element finder | `by_locator()`: locator string → selector Playwright; prefix lạ thì báo `ValueError` |
 | Dữ liệu test | `read_test_data(area)`: thiếu file thì báo `FileNotFoundError` kèm danh sách khu vực có sẵn |
-| Giá tiền | `money_to_float("£1,120.00")` → 1120.0; `money_to_pence("£1,120.00")` → 112000 (đơn vị của API) |
-| Dữ liệu ngẫu nhiên | `random_customer()`, `random_unregistered_login()`, `random_malformed_email()` |
-
-`BasePage` báo lỗi rõ ràng: mọi thao tác chờ và thao tác chính đều chạy trong `_report_timeout()`, nên khi Playwright hết thời gian chờ thì log một dòng ERROR và nói test đang làm gì, trên trang nào ("Clicking '//*[@id='checkout']' timed out on https://…/cart"), kèm call log của Playwright. `open_page()` dừng với thông báo rõ ràng khi store hiện trang kiểm tra bot ("Verifying your connection") thay vì trang cần mở; không bao giờ tìm cách vượt qua.
+| Giá tiền | `money_to_float("$1,120.00")` → 1120.0 (cả khi nằm trong câu: `"Item total: $29.99"` → 29.99) |
+| Dữ liệu ngẫu nhiên | `random_checkout_information()`, `random_unregistered_login()`, `random_password()` |
 
 ### 5. Assertion
 
-`expect()` tự thử lại tới khi đúng hoặc hết timeout (5 giây), nên không phải viết wait:
+`expect()` tự thử lại tới khi điều kiện đúng hoặc hết thời gian chờ (5 giây), nên không cần viết lệnh chờ:
 
 ```python
-@pytest.mark.critical
 @pytest.mark.smoke
-@pytest.mark.add_to_cart                      # yêu cầu REQ-01
-def test_add_an_in_stock_product_to_the_cart(shop, products, step):
-    """A customer adds one in-stock product: the cart shows 1 item at the product's price."""
+@pytest.mark.add_to_cart                      # requirement REQ-01 (the file adds @critical)
+def test_add_one_product_to_the_cart(logged_in_shop, products, step):
+    """A customer adds one product: the badge shows 1, the button turns into Remove, the cart lists it."""
     # Test data
-    grey_jacket = products["Grey jacket"]
+    backpack = "Sauce Labs Backpack"
 
     # Execution steps
     step_number = 1
-    with step(step_number, "Open the product page of Grey jacket"):
-        shop.product.open_product_page(grey_jacket["path-name"])
+    with step(step_number, f"Add {backpack} from the products page"):
+        logged_in_shop.inventory.add_product_to_cart(backpack)
     step_number += 1
-    with step(step_number, "Add 1 item to the cart"):
-        shop.product.add_to_cart(1)           # chờ response AJAX của /cart/add
+    with step(step_number, "Verify the cart badge shows 1 and the button says Remove"):
+        expect(logged_in_shop.inventory.cart_badge).to_have_text("1")
+        expect(logged_in_shop.inventory.cart_button(backpack)).to_have_text("Remove")
     step_number += 1
-    with step(step_number, "Verify the cart has 1 item, total £55.00"):
-        shop.cart.open_page()
-        verify_cart_contents(shop.cart, 1, "£55.00")   # expect(header_cart_link) "My Cart (1)" + total
+    with step(step_number, f"Open the cart and verify it holds {backpack} at {products[backpack]['price']}"):
+        logged_in_shop.inventory.open_cart()
+        assert logged_in_shop.cart.get_product_names() == [backpack]
+        assert logged_in_shop.cart.get_product_price(backpack) == products[backpack]["price"]
 ```
 
 | Unit 1 | Unit 2 |
 | --- | --- |
 | `self.wait.until(EC.url_contains("checkout"))` | `expect(page).to_have_url(re.compile("checkout"))` |
-| `assert cart.is_empty()` sau khi wait | `expect(cart.quantity_boxes).to_have_count(0)` |
-| `assert error_text().strip()` | `expect(shop.login.error).to_be_visible()` |
+| `assert badge.text == "1"` sau khi chờ | `expect(shop.inventory.cart_badge).to_have_text("1")` |
+| `assert error_text().strip()` | `expect(shop.login.error_message).to_have_text("Epic sadface: …")` |
+| `assert not badge.is_displayed()` | `expect(shop.inventory.cart_badge).to_be_hidden()` |
 
 #### Cấu trúc một test: dữ liệu test, rồi các bước được đánh số
 
@@ -219,29 +237,27 @@ Test nào cũng đọc theo cùng một khung: docstring nói test chứng minh 
 | --- | --- |
 | Báo cáo Allure | Test hiện thành danh sách "Step 1: … / Step 2: … / Step 3: …", bước fail tô đỏ; docstring là phần mô tả, marker là tag |
 | Trace Viewer | Các click và wait của test fail được gom dưới tên bước |
-| Báo cáo HTML / JUnit | Lỗi có thêm dòng `failed in Step 3: Verify the cart has 1 item, total £55.00` |
+| Báo cáo HTML / JUnit | Lỗi có thêm dòng `failed in Step 3: Open the cart and verify it holds …` |
 
-Page object theo cùng ý: method được gom dưới banner ghi khu vực của trang, method public nào cũng có docstring, locator vẫn ở cuối class:
+Page object theo cùng ý: method được gom dưới banner ghi khu vực của trang, method public nào cũng có docstring, locator ở cuối class:
 
 ```python
-class ProductPage(BasePage):
+class CartPage(BasePage):
     ############################################################################
-    # Add to cart methods
-    # Scope: Product page > Add to cart form
+    # Navigation methods
+    # Scope: Cart page > Continue Shopping, Checkout
     ############################################################################
-    def add_to_cart(self, quantity: int = 1):
-        """Add ``quantity`` items and wait until the store has answered every add."""
-        ...
-
-    # --- Locators -------------------------------------------------------------
-    _add_form = "form[action*='/cart/add']"
+    def click_checkout(self):
+        """Click "Checkout" and wait for the checkout information page."""
+        self.click_element(self._checkout_button)
+        self.wait_until_url_contains("/checkout-step-one.html")
 ```
 
-Hai quy tắc này nằm trong checklist review (Day 8, B4).
+Cả hai quy tắc nằm trong checklist review (Day 8, B4).
 
-### 6. Kiểm tra tính cô lập
+### 6. Kiểm tra cô lập
 
-`tests/ui/test_auth_state.py::test_auth_state_does_not_leak_into_other_tests` chứng minh test dùng `page` mặc định không bị đăng nhập, dù test khác trong cùng session dùng trạng thái đăng nhập đã lưu.
+`tests/test_auth_state.py::test_login_state_does_not_leak_into_other_tests` chứng minh test dùng `page` mặc định không ở trạng thái đăng nhập, kể cả khi một test khác trong cùng phiên chạy dùng phiên đăng nhập đã lưu.
 
 ### 7. Chạy
 
@@ -249,27 +265,28 @@ Hai quy tắc này nằm trong checklist review (Day 8, B4).
 cd ATEST03-unit2
 pip install -r requirements.txt
 playwright install chromium
-pytest --collect-only -q          # 37 test giao diện (29 chạy mặc định) + 36 test API (31 chạy mặc định)
-pytest -m smoke                   # cùng tag smoke như Unit 1
+cp .env.example .env              # điền tài khoản demo ghi trên https://www.saucedemo.com
+pytest --collect-only -q          # 43 test
+pytest -m smoke                   # 3 test: đăng nhập, thêm vào giỏ, hoàn tất đơn
 pytest --headed --slowmo 300      # xem trình duyệt chạy
 ```
 
 ### 8. Câu hỏi ôn tập
 
-1. Vì sao browser context mới cô lập giống trình duyệt mới, và vì sao rẻ hơn?
-2. `browser_context_args` thay cho file nào ở Unit 1?
-3. Viết lại `self.wait.until(lambda d: name in body_text())` bằng assertion của Playwright.
-4. Vì sao `get_by_role("link", name=...)` tốt hơn `a[href*='/cart']`?
+1. Vì sao browser context mới cô lập test giống như trình duyệt mới, và vì sao nó rẻ hơn?
+2. Swag Labs giữ giỏ hàng ở đâu, và vì sao điều đó làm context là đơn vị cô lập phù hợp?
+3. Viết lại `self.wait.until(lambda d: badge().text == "2")` thành assertion của Playwright.
+4. Vì sao `//*[@data-test='checkout']` tốt hơn `//button[2]` hay `//button[text()='Checkout']`?
 
 ---
 
-## Day 6 – Tracing, Network Interception, Authentication State, Parallel Execution & Reporting
+## Day 6 – Tracing, Trạng thái đăng nhập, Chạy song song & Báo cáo
 
 Unit 2 · LO3 · Concept/Lecture · 120 phút · Virtual
 
-Day 6 thêm những gì Unit 1 chưa có: trace đầy đủ cho mỗi test fail, kiểm soát lưu lượng network, dùng lại phiên đăng nhập và chạy song song.
+Day 6 thêm những thứ Unit 1 chưa có: trace đầy đủ cho mọi test fail, dùng lại phiên đăng nhập và chạy song song.
 
-### 1. Tracing (mở rộng ảnh chụp khi fail của Unit 1)
+### 1. Tracing (mở rộng từ việc chụp màn hình khi fail ở Unit 1)
 
 Cấu hình một lần trong `pytest.ini`:
 
@@ -284,107 +301,45 @@ addopts =
 | Unit 1 | Unit 2 |
 | --- | --- |
 | `after_step` lưu một ảnh PNG | `test-results/<test>/trace.zip`, `test-failed-1.png`, `video.webm` |
-| Chỉ thấy màn hình cuối | Mọi action, DOM trước/sau, console, network, dòng code |
+| Chỉ thấy màn hình cuối | Mọi thao tác, DOM trước/sau, console, network, dòng code, các bước đánh số |
 
 ```bash
-playwright show-trace test-results/<thư-mục-test>/trace.zip   # mở trace
-pytest --tracing on                                           # giữ trace cho mọi test khi debug
+playwright show-trace test-results/<test-folder>/trace.zip   # mở một trace
+pytest --tracing on                                          # giữ trace cho mọi test khi debug
 ```
 
-### 2. Chặn và giả lập network
+### 2. Lỗi đã biết: `xfail(strict=True)`
 
-#### 2.1 Chặn request bên thứ ba (fixture autouse)
-
-Phần xử lý request nằm trong `api/` (`CartApi`, `NetworkApi`); test và fixture chỉ gọi method rồi kiểm tra kết quả.
+**Phát hiện F1:** sau khi bấm **Reset App State** (menu bên), giỏ đã trống — badge biến mất — nhưng nút của sản phẩm vẫn ghi "Remove" thay vì "Add to cart". Khách thấy sản phẩm như đang "nằm trong giỏ" dù thực tế không có.
 
 ```python
-# tests/ui/conftest.py - the fixture only calls NetworkApi
-@pytest.fixture(autouse=True)
-def block_third_party(request, base_url: str):
-    if request.node.get_closest_marker("allow_third_party") or "page" not in request.fixturenames:
-        yield []
-        return
-    page = request.getfixturevalue("page")
-    yield NetworkApi(page.context.request, page).block_third_party_hosts(urlparse(base_url).hostname)
-
-# api/network_api.py - the request handling itself
-def block_third_party_hosts(self, store_host: str) -> list[str]:
-    blocked: list[str] = []
-    self.page.context.route("**/*", partial(self._abort_or_continue, store_host=store_host, blocked=blocked))
-    return blocked
+@pytest.mark.xfail(strict=True, reason="Finding F1: after Reset App State the cart is empty but the product's button "
+                                        "still says Remove (checked 2026-11-27)")
+def test_reset_app_state_empties_the_cart_and_resets_the_buttons(fill_cart, step):
 ```
 
-Cho phép: host của store và `*.shopify.com`, `*.myshopify.com`, `*.shopifycdn.com`. Mọi host khác (Facebook, Twitter, Pinterest, ứng dụng Sauce) bị hủy. Rủi ro R09 (widget bên thứ ba), vốn kiểm thủ công ở Unit 1, giờ test được.
+Test ghi hành vi đúng và được đánh dấu `xfail(strict=True)` kèm mô tả phát hiện: báo cáo liệt kê nó là lỗi đã biết, và khi shop sửa xong thì test pass, `strict` làm lần chạy fail để nhắc bỏ marker. Chạy bỏ qua marker để xem bước fail: `pytest --runxfail tests/test_cart.py -k reset`.
 
-#### 2.2 Đã bỏ các test network
+### 3. Trạng thái đăng nhập
 
-Bộ test từng có `tests/ui/test_network.py` (kiểm tra request, giả lập lỗi, mạng chậm). File này đã được bỏ: các ca đó chủ yếu thử kỹ thuật của Playwright hơn là yêu cầu của store, và làm tăng tải lên store thật. Phần còn lại là fixture autouse ở trên, giữ mọi test giao diện tránh xa script bên thứ ba.
-
-### 2b. Test API (`tests/api/`)
-
-Các trang của store gọi một API JSON (Shopify AJAX API). Test thẳng API thì nhanh (13 test, khoảng 5 giây), không cần trình duyệt, và cho thấy chính server cho phép những gì. Các API object nằm trong `api/`, ngang hàng `pages/` và chia giống vậy, mỗi khu vực một class:
-
-| API object (`api/`) | Method | Endpoint |
-| --- | --- | --- |
-| `BaseApi` | `get(endpoint, params)`, `post(endpoint, data)` — có ghi log kèm status | — |
-| `ProductApi` | `request_product(path_name)` | `GET /products/<path-name>.js` |
-| `CartApi` | `add_product_to_cart(path_name, quantity)`, `get_cart()`, `change_cart_line_quantity(line, quantity)` | `POST /cart/add.js`, `GET /cart.js`, `POST /cart/change.js` |
-| `SearchApi` | `search_product_titles(keyword)` | `GET /search/suggest.json` |
-| `AccountApi` | `is_logged_in()`, `get_account_redirect()`, `login(email, password)`, `logout()`, `register_account(...)`, `request_password_reset(email)` — gửi các form tài khoản của store mà không cần trình duyệt; nếu bị chuyển sang trang kiểm tra bot (`/challenge`) thì dừng với thông báo rõ ràng, không bao giờ vượt qua | `GET /account`, `POST /account/login`, `GET /account/logout`, `POST /account`, `POST /account/recover` |
-| `NetworkApi` | `block_third_party_hosts(store_host)` | traffic của page (route + abort) |
-
-| Fixture | Ở đâu | Request context | Dùng cho |
-| --- | --- | --- | --- |
-| `shop_api` | `tests/api/conftest.py` | riêng (`playwright.request.new_context`): không trình duyệt, giỏ riêng | test API: `shop_api.product`, `.cart`, `.search`, `.account` (giống `shop` cho page) |
-| `shop_api_in_browser` | `tests/ui/conftest.py` | của page (`page.context.request`) + page: dùng chung cookie với trình duyệt | test giao diện: chuẩn bị dữ liệu bằng API (`.cart`, `.account`) rồi page hiển thị |
-
-| Test | Kiểm tra | Yêu cầu |
-| --- | --- | --- |
-| `test_product_api.py`: `…_returns_the_catalog_name_price_and_stock` (×7), `…_returns_the_catalog_type_vendor_and_options` (×7), `test_unknown_product_returns_404` | tên, giá (pence), `available`, loại, hãng, option khớp `dataset/products.json`; 404 cho sản phẩm không tồn tại | REQ-04 |
-| `test_cart_api.py`: `…_adds_the_product_and_totals_the_price` (×4), `…_changes_the_quantity_of_a_line` (×2), `…_removes_a_line_set_to_zero` | các ca trong `dataset/cart.json`: số món và tổng tiền (pence) | REQ-01, REQ-02 |
-| `test_cart_api.py`: `test_cart_api_refuses_a_sold_out_product` | **xfail, phát hiện A1** | REQ-04 |
-| `test_search_api.py`: `…_suggests_matching_products`, `…_suggests_nothing_for_an_unknown_keyword` | các ca trong `dataset/search.json`: gợi ý mong đợi / không có gì | REQ-08 |
-| `test_account_api.py`: `test_account_page_sends_a_guest_to_the_login_page` | `/account` chuyển khách chưa đăng nhập về `/account/login` | REQ-05 |
-| `test_account_api.py`: `test_login_api_rejects_invalid_credentials` (×2, manual), `test_login_api_logs_the_customer_in_and_out` (auth), `test_register_api_rejects_a_missing_email` (manual), `test_register_api_creates_an_account_and_logs_it_in` (data_creating) | đăng nhập bị từ chối / thành công, đăng xuất, đăng ký — mặc định bị lọc giống bản giao diện (CAPTCHA, tài khoản thật, dữ liệu thật) | REQ-05, REQ-07 |
-| `tests/ui/test_cart.py`: `test_cart_prepared_through_the_api_shows_in_the_browser` | API để chuẩn bị, trình duyệt để kiểm tra | REQ-01 |
-
-**Phát hiện A1:** Brown Shades đang hết hàng (`"available": false`, trang sản phẩm hiện nút "Sold Out" bị khoá), nhưng `POST /cart/add.js` vẫn thêm được (HTTP 200, giỏ có 1 món). Test giao diện pass; chỉ test API thấy lỗi này. Test ghi hành vi đúng (phải bị từ chối) và được đánh dấu `xfail(strict=True)` kèm mô tả: báo cáo liệt kê nó là lỗi đã biết, và khi store sửa xong thì test pass, `strict` làm lần chạy fail để nhắc bỏ marker.
-
-```bash
-pytest tests/api       # chỉ chạy test API (không trình duyệt)
-pytest tests/ui        # chỉ chạy test giao diện
-```
-
-### 3. Lưu trạng thái đăng nhập
-
-Unit 1 gõ thông tin đăng nhập ở mọi scenario cần đăng nhập. Unit 2 đăng nhập một lần mỗi session và lưu cookie, localStorage:
+Ở Unit 1, scenario nào cần đăng nhập cũng phải gõ tài khoản. Playwright có thể đăng nhập một lần rồi lưu cookie và localStorage ra file; context mới tạo từ file đó đã ở trạng thái đăng nhập:
 
 ```python
 @pytest.fixture(scope="session")
-def saved_login_state(browser: Browser, base_url: str) -> Path:
-    email, password = os.getenv("SAUCE_EMAIL"), os.getenv("SAUCE_PASSWORD")
-    if not (email and password):
-        pytest.skip("Set SAUCE_EMAIL and SAUCE_PASSWORD to run @auth tests")
+def saved_login_state(browser: Browser, base_url: str, swag_accounts) -> Path:
+    """Log in once per session and save cookies + localStorage; a test opens a context from the file."""
     context = browser.new_context(base_url=base_url)
-    page = context.new_page()
-    login = LoginPage(page)
+    login = LoginPage(context.new_page())
     login.open_page()
-    login.login(email, password)
-    page.wait_for_url("**/account**")
+    standard_user = swag_accounts["standard-user"]
+    login.login_and_wait_for_products(standard_user["username"], standard_user["password"])
     AUTH_FILE.parent.mkdir(exist_ok=True)
     context.storage_state(path=str(AUTH_FILE))
     context.close()
     return AUTH_FILE
 ```
 
-Được dùng trong `tests/ui/test_auth_state.py` (rủi ro R04). File `.auth/customer.json` chứa phiên đăng nhập: không được đưa lên git.
-
-```bash
-# Linux/macOS
-SAUCE_EMAIL=you@example.com SAUCE_PASSWORD='...' pytest -m auth
-# Windows PowerShell
-$env:SAUCE_EMAIL="you@example.com"; $env:SAUCE_PASSWORD="..."; pytest -m auth
-```
+Dùng trong `tests/test_auth_state.py` (rủi ro R04). `.auth/standard_user.json` chứa một phiên đăng nhập: đã có trong `.gitignore`, không bao giờ commit. Các test khác đăng nhập qua form (`logged_in_shop`): trên Swag Labs việc này chưa tới một giây, và giữ cho mỗi test không phụ thuộc vào cookie đăng nhập của phiên chạy, vì Swag Labs cho cookie hết hạn 10 phút sau khi đăng nhập.
 
 ### 4. Chạy song song
 
@@ -393,117 +348,117 @@ pytest -n auto        # pytest-xdist, mỗi CPU một worker
 pytest -n 4
 ```
 
-An toàn vì mỗi test có context riêng (Day 5) và không test nào phụ thuộc test khác. Store demo dùng chung nên trên site thật để `-n` nhỏ.
+An toàn vì mỗi test có context riêng (Day 5) và không test nào phụ thuộc test khác. Swag Labs là site tĩnh, nên chạy song song không làm nặng máy chủ dùng chung nào.
 
 ### 5. Mẫu báo cáo
 
-| Báo cáo | Tạo bởi | Đường dẫn |
+| Báo cáo | Do đâu tạo | Đường dẫn |
 | --- | --- | --- |
 | HTML | pytest-html (`--html` trong `pytest.ini`) | `reports/report.html` |
 | JUnit XML | `--junitxml` | `reports/junit.xml` |
 | Kết quả Allure (bước đánh số) | allure-pytest (`--alluredir`); xem bằng `allure serve reports/allure-results` (Allure CLI) | `reports/allure-results/` |
 | Trace, ảnh, video | pytest-playwright | `test-results/` |
 
-Test nào cũng mang một marker yêu cầu (`@pytest.mark.add_to_cart` …): `pytest -m add_to_cart` chạy riêng một yêu cầu, `pytest -m critical --collect-only -q` liệt kê mọi test rủi ro Critical, và marker hiện trong báo cáo HTML.
+Test nào cũng mang một marker yêu cầu (`@pytest.mark.add_to_cart` …) và một marker mức rủi ro: `pytest -m add_to_cart` chạy một yêu cầu, `pytest -m critical --collect-only -q` liệt kê mọi test rủi ro Critical, và marker hiện trong báo cáo HTML. `-rfEs` trong `pytest.ini` liệt kê test fail, lỗi và test bị bỏ qua (kèm lý do) ở cuối lần chạy.
 
 ### 6. Câu hỏi ôn tập
 
-1. Trace cho thấy những gì mà ảnh chụp không cho thấy?
-2. Vì sao `block_third_party` là autouse, và test muốn bỏ qua thì làm thế nào?
-3. Vì sao `saved_login_state` phải có scope session, và vì sao `.auth/` không được đưa lên git?
-4. Vì sao chạy `pytest -n auto` an toàn với bộ test này?
+1. Trace cho thấy những gì mà ảnh chụp màn hình không thấy?
+2. Vì sao F1 là `xfail(strict=True)` chứ không skip hay xoá test?
+3. Vì sao `saved_login_state` phải có scope session, và vì sao `.auth/` không được đưa vào git?
+4. Vì sao `pytest -n auto` an toàn với bộ test này?
 
 ---
 
-## Day 7 – Playwright Implementation Lab: Prioritised End-to-End Workflows with Fixtures, Tracing & Network Control
+## Day 7 – Lab Playwright: Các luồng End-to-End ưu tiên với Fixture & Tracing
 
 Unit 2 · LO3 · Assignment/Lab · 150 phút · Hybrid
 
-Bài lab tự động hóa các ưu tiên rủi ro của Unit 1 trên Playwright: 22 test trình duyệt trong lần chạy mặc định, thêm 2 test đăng nhập khi có tài khoản, 3 test `manual` (CAPTCHA) và 1 test `data_creating`.
+Buổi lab tự động hoá các ưu tiên theo rủi ro trên Playwright: 43 test, tất cả đều chạy mặc định (Swag Labs không cần loại test manual hay tạo dữ liệu thật).
 
-### 1. Luồng nghiệp vụ theo ưu tiên (từ bảng rủi ro của Unit 1)
+### 1. Các luồng ưu tiên (từ bảng rủi ro)
 
-| Ưu tiên | Luồng | Risk | Test | Kỹ thuật Unit 2 |
+| Ưu tiên | Luồng | Rủi ro | Test | Kỹ thuật Unit 2 |
 | --- | --- | --- | --- | --- |
-| P1 | Thêm vào giỏ, tổng tiền, đổi, xóa | R01 Critical (20) | `test_cart.py` (các ca trong `dataset/cart.json`) + test API giỏ hàng | fixture `add_product_and_open_cart`, `parametrize`, chuẩn bị bằng API |
-| P1 | Giỏ hàng → checkout | R02 Critical (15) | 1 test trong `test_checkout.py` | `expect(page).to_have_url` |
-| P1 | Trang chi tiết, hàng hết | R03 High (12) | 2 test trong `test_catalog.py` | `//*[@itemprop='name']`, `to_be_disabled()` |
-| P1 | Đăng nhập, reset mật khẩu, phiên đã lưu | R04 High (12) | reset mật khẩu + 2 test auth; 2 test đăng nhập sai là `manual` (CAPTCHA) | storage state `saved_login_state` |
-| P1 | Giá và tình trạng trên catalog | R05 High (12) | 7 trường hợp parametrize (mỗi sản phẩm một) | `parametrize` |
-| P2 | Kiểm tra lỗi đăng ký | R06 Medium (9) | 1 test `manual` (CAPTCHA) + 1 test `data_creating` | — |
-| P2 | Tìm kiếm | R07 Medium (9) | 2 test trong `test_search.py` | thông báo không có kết quả |
-| P2 | Dịch vụ bên thứ ba lỗi không làm hỏng việc mua hàng | R09 Medium (6) | mọi test giao diện chạy khi host bên thứ ba bị chặn | route của `block_third_party` |
+| P1 | Thêm vào giỏ, xoá, giữ giỏ khi mua tiếp, reset | R01 Critical | `test_cart.py`: 10 test (ca trong `dataset/cart.json`), 1 test `xfail` (F1) | factory `fill_cart`, `parametrize`, `to_be_hidden()` |
+| P1 | Checkout: thông tin, tổng tiền, hoàn tất | R02 Critical | `test_checkout.py`: 7 test (ca trong `dataset/checkout.json`) | khách hàng Faker, `to_have_text` trên tổng tiền |
+| P1 | Trang sản phẩm = danh sách | R03 High | `test_catalog.py`: 6 ca (mỗi sản phẩm một) | `parametrize` trên `products.json` |
+| P1 | Đăng nhập, đăng xuất, user bị khoá, phiên đã lưu | R04 High | `test_login.py` 8 test + `test_auth_state.py` 2 test | `accounts` từ `.env` + Faker, `saved_login_state` |
+| P1 | Tên, mô tả, giá trong danh sách | R05 High | `test_catalog.py`: 6 ca | `product_card(name)` |
+| P2 | Sắp xếp | R07 Medium | `test_catalog.py`: 4 ca (`dataset/catalog.json`) | thứ tự mong đợi tính từ `products.json` |
 
 ### 2. File
 
 | File | Vai trò |
 | --- | --- |
-| `tests/ui/test_<khu_vực>.py` | Mỗi khu vực một file; test nào cũng có marker rủi ro, bộ chạy và yêu cầu |
-| `tests/conftest.py` | Fixture, kiểm soát network, trạng thái đăng nhập |
-| `tests/ui/test_auth_state.py` | Phiên đăng nhập đã lưu và kiểm tra cô lập |
-| `pages/` | Page Object chuyển từ Unit 1 |
-| `pytest.ini` | base URL, tracing, báo cáo, bộ lọc marker mặc định, danh sách marker (`--strict-markers`) |
+| `tests/test_<khu_vực>.py` | Mỗi khu vực một file; test nào cũng có marker rủi ro, bộ chạy và yêu cầu |
+| `tests/conftest.py` | Fixture: dữ liệu, tài khoản, page object, shop đã đăng nhập, factory giỏ hàng, phiên đã lưu, bước |
+| `tests/test_auth_state.py` | Phiên đăng nhập đã lưu và kiểm tra cô lập |
+| `pages/` | Page Object, mỗi trang của shop một class |
+| `dataset/` | Dữ liệu test, mỗi khu vực một file |
+| `pytest.ini` | base URL, tracing, báo cáo, danh sách marker (`--strict-markers`) |
 
-### 3. Chạy bài lab
+### 3. Chạy lab
 
 ```bash
 cd ATEST03-unit2
 pip install -r requirements.txt
 playwright install chromium
-pytest                              # bộ mặc định
-pytest -m smoke                     # @smoke: thêm vào giỏ + checkout
-pytest -n auto                      # chạy song song
-pytest -m auth                      # cần SAUCE_EMAIL / SAUCE_PASSWORD
+cp .env.example .env                # điền tài khoản demo
+pytest                              # cả bộ test
+pytest -m smoke                     # đăng nhập + thêm vào giỏ + hoàn tất đơn
+pytest -n auto                      # song song
 pytest -m critical                  # mọi test rủi ro Critical
 pytest -m "critical and not negative"
+pytest tests/test_checkout.py       # một khu vực
 ```
 
 ### 4. Kết quả mong đợi
 
 | Kiểm tra | Kết quả |
 | --- | --- |
-| `pytest` | 59 pass (29 giao diện + 30 API), 1 xfailed (API, phát hiện A1), 13 bị lọc (`auth` ×4, `manual` ×7, `data_creating` ×2) |
-| `pytest -n auto` | 35 pass, 1 xfailed (chạy trên phiên bản cũ của bộ test; với store thật thường chạy tuần tự để tải nhẹ) |
-| `pytest -m auth` (có tài khoản) | 2 pass |
+| `pytest` | 42 pass, 1 xfailed (phát hiện F1), khoảng 50 giây |
+| `pytest -n 4` | 42 pass, 1 xfailed, khoảng 23 giây (2 lần chạy, cùng kết quả) |
+| `pytest` khi chưa có `.env` | mọi test cần tài khoản được bỏ qua, kèm tên biến cần điền |
 | Test fail | `test-results/<test>/trace.zip`, ảnh, video |
 
-Đã chạy trên store thật (2026-11-25). Store thật dạy bộ test hai điều: theme cần jQuery từ `ajax.googleapis.com` (bị chặn thì nút "Sold Out" không bao giờ hiện và Add to Cart thành post cả trang), và CAPTCHA của store chặn form đăng nhập và đăng ký. Điều thứ ba (2026-11-27): chạy nhiều lần từ cùng một mạng trong thời gian ngắn thì Add to Cart bị HTTP 429, rồi store hiện trang kiểm tra Cloudflare ("Just a moment..."). Test như vậy dừng ngay và được ghi là SKIPPED kèm lý do (`StoreBlockedError` + hook `pytest_runtest_makereport` trong `tests/conftest.py`), không phải FAILED; không bao giờ vượt qua bước kiểm tra. Đợi vài phút rồi chạy tuần tự, cần thì chạy từng thư mục.
+Đã chạy trên www.saucedemo.com (2026-11-27).
 
 ### 5. Nhiệm vụ lab
 
-1. Thêm test giả lập lỗi: trang giỏ hàng trả 503. Khách hàng phải thấy gì? Viết assertion.
-2. Làm `test_product_page_shows_the_catalog_name_and_price` fail bằng cách đổi giá mong đợi, mở trace và tìm bước bị fail.
-3. Thêm một test tìm "sandals" với đúng marker yêu cầu và rủi ro. Chạy `pytest -m search_products` và kiểm tra nó chạy cùng các test khác của REQ-08.
+1. Thêm một ca checkout ba sản phẩm vào `dataset/checkout.json` (tự tính thuế 8%). Test nào chạy ca đó mà không cần sửa code?
+2. Làm `test_product_page_shows_the_same_name_description_and_price` fail bằng cách đổi một giá trong `products.json`, mở trace và tìm bước bị fail.
+3. Thêm một ca đăng nhập cho `problem_user` (tài khoản demo đăng nhập được nhưng hiện sai ảnh): cần fixture nào và biến `.env` nào?
 4. Chạy `pytest -n auto` ba lần, so thời gian với chạy tuần tự.
 
 ---
 
-## Day 8 – Topic Revision + Playwright Reliability & Maintainability: Failure Analysis, Flaky-Test Control, Tracing Diagnostics
+## Day 8 – Ôn tập + Độ tin cậy & khả năng bảo trì với Playwright: Phân tích lỗi, Kiểm soát test chập chờn, Chẩn đoán bằng Trace
 
 Unit 2 · LO3 · Guides/Review (60 phút) + Concept/Lecture (120 phút) · Virtual
 
-Day 8 khép lại cả hai Unit: phần A ôn tập Unit 2 so với Unit 1; phần B làm cho bộ test ổn định bằng quy trình phân tích lỗi dựa trên trace, chạy lặp để lộ test flaky, và checklist bảo trì.
+Day 8 khép lại cả hai unit: phần A ôn Unit 2 so với Unit 1, phần B làm bộ test ổn định bằng quy trình phân tích lỗi dựa trên trace, chạy lặp lại để lộ test chập chờn, và checklist bảo trì.
 
 ### Phần A – Ôn tập (60 phút)
 
 | Chủ đề | Unit 1 (Day 1–4) | Unit 2 (Day 5–7) |
 | --- | --- | --- |
-| Đặc tả | Feature Gherkin, tag | Test pytest thường; marker cho yêu cầu, rủi ro và bộ chạy |
-| Động cơ | Selenium WebDriver | Playwright (tự chờ, context) |
-| Setup / teardown | Hook của behave | Fixture của pytest (`conftest.py`) |
+| Đặc tả | Feature Gherkin, tag | Test pytest thuần; marker cho yêu cầu, rủi ro và bộ chạy |
+| Engine | Selenium WebDriver | Playwright (tự chờ, context) |
+| Chuẩn bị / dọn dẹp | Hook của behave | Fixture pytest (`conftest.py`) |
 | Cô lập | Trình duyệt mới mỗi scenario | Context mới mỗi test |
-| Chờ | `WebDriverWait` | Action tự chờ, `expect()` tự thử lại |
-| Bằng chứng lỗi | Ảnh chụp | Trace + ảnh + video |
-| Network | Không kiểm soát | Chặn host bên thứ ba trong mọi test giao diện |
-| Đăng nhập | Đăng nhập qua UI mỗi lần | Dùng lại storage state đã lưu |
+| Chờ | `WebDriverWait` | Thao tác tự chờ, `expect()` tự thử lại |
+| Bằng chứng khi fail | Ảnh chụp màn hình | Trace + ảnh + video |
+| Đăng nhập | Đăng nhập qua UI mỗi lần | Đăng nhập qua UI mỗi test + lưu storage state |
 | Tốc độ | Tuần tự | Song song `-n auto` |
-| Lọc | `behave --tags=@cart` | `pytest tests/ui/test_cart.py`, `pytest -m add_to_cart` |
+| Chọn test | `behave --tags=@cart` | `pytest tests/test_cart.py`, `pytest -m add_to_cart` |
+| Ứng dụng | Store demo Shopify | Swag Labs (không chặn bot: xem phần mở đầu) |
 
 Câu hỏi ôn tập:
 
-1. Unit 2 chạy nguyên vẹn những file nào của Unit 1, và vì sao điều đó có ích?
-2. Kể hai rủi ro có kỹ thuật test thay đổi ở Unit 2 và giải thích.
-3. Unit 2 xử lý những phát hiện review nào của Unit 1? (F3 độ ổn định; F7 và F8 lỗi chờ submit form, đã sửa ở cả hai Unit.)
+1. Những phần nào của Unit 1 (file dữ liệu, bố cục page object, marker) giữ nguyên được, và vì sao điều đó có ích?
+2. Vì sao Unit 2 chuyển từ store Shopify sang Swag Labs, và vì sao vượt qua kiểm tra chống bot không bao giờ là cách giải quyết?
+3. Unit 2 xử lý những phát hiện review nào của Unit 1? (F3 độ ổn định: tự chờ và `expect()`; F7 và F8 race khi submit form: mọi click làm đổi trang đều chờ địa chỉ mới.)
 
 ### Phần B – Độ tin cậy và khả năng bảo trì (120 phút)
 
@@ -511,21 +466,21 @@ Câu hỏi ôn tập:
 
 ```text
 test fail
- ├─ 1. đọc thông điệp assertion trong reports/report.html
+ ├─ 1. đọc thông báo assertion trong reports/report.html ("failed in Step N: ...")
  ├─ 2. mở test-results/<test>/trace.zip   (playwright show-trace)
- │     ├─ tab Actions: step nào, locator nào, chờ bao lâu
- │     ├─ Snapshots: DOM trước/sau action
- │     └─ tab Network: mã trạng thái, request chậm hoặc lỗi
+ │     ├─ tab Actions: bước nào, locator nào, chờ bao lâu
+ │     ├─ Snapshots: DOM trước/sau thao tác
+ │     └─ tab Console: lỗi JavaScript của shop
  ├─ 3. phân loại
- │     ├─ lỗi sản phẩm   → sai giá, sai tổng, trang lỗi → báo bug kèm trace
- │     ├─ lỗi test       → locator đổi, giả định sai → sửa trong pages/ hoặc trong test
- │     └─ môi trường     → store sập, captcha, mạng → chạy lại sau, gắn @manual nếu kéo dài
- └─ 4. chạy lại pass mà không sửa gì → flaky: xem B2
+ │     ├─ lỗi sản phẩm   → sai tổng tiền, sai chữ trên nút → báo bug kèm trace, tạm xfail(strict)
+ │     ├─ lỗi test       → locator đổi, giả định sai → sửa trong pages/ hoặc file dữ liệu
+ │     └─ môi trường     → site sập, mạng, thiếu .env → chạy lại sau, hoặc sửa phần chuẩn bị
+ └─ 4. nếu chạy lại không sửa gì mà pass → chập chờn: xem B2
 ```
 
-#### B2. Kiểm soát test flaky
+#### B2. Kiểm soát test chập chờn
 
-Chạy cả bộ nhiều lần rồi so; mỗi lần ghi một file JUnit riêng:
+Chạy cả bộ vài lần rồi so sánh; mỗi lần ghi một file JUnit riêng:
 
 ```bash
 pytest --junitxml=reports/run_1.xml
@@ -533,66 +488,66 @@ pytest --junitxml=reports/run_2.xml
 pytest --junitxml=reports/run_3.xml
 ```
 
-| Kết quả qua các lần chạy | Ý nghĩa | Hành động |
+| Kết quả qua các lần chạy | Ý nghĩa | Việc cần làm |
 | --- | --- | --- |
 | lần nào cũng pass | ổn định | — |
 | lần nào cũng fail | lỗi thật hoặc test hỏng | phân tích trace (B1) |
-| lúc pass lúc fail | flaky | cách ly, tìm nguyên nhân gốc |
+| lúc pass lúc fail | chập chờn | cách ly, tìm nguyên nhân gốc |
 
 Cách ly trong lúc tìm nguyên nhân (đã cài pytest-rerunfailures):
 
 ```python
-@pytest.mark.flaky(reruns=2, reruns_delay=1)   # tạm thời, ghi số ticket trong commit
+@pytest.mark.flaky(reruns=2, reruns_delay=1)   # temporary, with a ticket number in the commit
 def test_something_flaky(...):
     ...
 ```
 
-Chạy `pytest --reruns 1` cho cả bộ cũng làm lộ test flaky: báo cáo HTML đánh dấu chúng là "rerun". Chạy lại sẽ che giấu vấn đề, nên đây chỉ là nhãn tạm, không bao giờ để làm mặc định cho cả bộ.
+`pytest --reruns 1` cho cả lần chạy cũng làm lộ test chập chờn: báo cáo HTML đánh dấu chúng là "rerun". Chạy lại che giấu vấn đề, nên chỉ là nhãn tạm thời, không bao giờ là mặc định của bộ test.
 
-Nguyên nhân hay gặp và cách code này xử lý:
+Nguyên nhân gốc thường gặp và cách sửa trong code này:
 
-| Nguyên nhân | Cách xử lý trong repo |
+| Nguyên nhân | Cách sửa trong repository này |
 | --- | --- |
 | Chờ cố định | Không dùng; chỉ `expect()` và `wait_for_url` |
-| Action sau chạy trước khi request trước xong | `BasePage.submit()` chờ chuyển trang sau mỗi nút submit form; thêm vào giỏ còn chờ response `/cart/add` (phát hiện F7, F8 của Unit 1: ảnh lỗi cho thấy giỏ hàng cũ) |
-| Script bên thứ ba | Fixture autouse `block_third_party` |
-| Trạng thái dùng chung giữa các test | Mỗi test một context; `test_auth_state_does_not_leak_into_other_tests` |
-| Selector theo vị trí | Không dùng; chỉ role, text và thuộc tính ổn định |
+| Thao tác tiếp theo chạy trước khi trang đổi xong | Mọi click làm đổi trang đều chờ địa chỉ mới (`wait_until_url_contains`); ứng dụng một trang không tải tài liệu mới, nên chờ load state sẽ trả về ngay |
+| Trạng thái dùng chung giữa các test | Mỗi test một context (cookie riêng, giỏ trong localStorage riêng); `test_login_state_does_not_leak_into_other_tests` |
+| Selector theo vị trí | Không dùng; chỉ thuộc tính `data-test` và chữ trong phạm vi |
+| Giá trị trùng khi sắp xếp | Hai sản phẩm cùng giá ($15.99): sắp theo giá thì so danh sách giá, không so tên |
 
 #### B3. Kiểm tra độ ổn định trước khi commit
 
-Lệnh tìm nhanh (PowerShell; trong Git Bash dùng `grep -rnE`):
+Tìm nhanh (PowerShell; trong Git Bash dùng `grep -rnE`):
 
 ```powershell
 Select-String -Path tests\*.py, pages\*.py -Pattern 'wait_for_timeout|time\.sleep'   # chờ cố định
-Select-String -Path tests\*.py, pages\*.py -Pattern 'force=True'                     # bấm cưỡng ép
+Select-String -Path tests\*.py, pages\*.py -Pattern 'force=True'                     # click cưỡng ép
 Select-String -Path tests\*.py -Pattern ':nth-child|nth=|\.nth\('                     # selector theo vị trí
 ```
 
 | Quy tắc | Lý do |
 | --- | --- |
-| Không `wait_for_timeout(` / `time.sleep(` | Chờ cố định vừa chậm vừa vẫn flaky |
-| Không `force=True` | Che đi phần tử mà người dùng không bấm được |
+| Không `wait_for_timeout(` / `time.sleep(` | Chờ cố định vừa chậm vừa vẫn chập chờn |
+| Không `force=True` | Che mất phần tử mà người dùng không bấm được |
 | Không selector theo vị trí trong test | Hỏng khi bố cục thay đổi |
-| Không CSS/XPath thô trong test | Locator phải nằm trong `pages/` |
-| Test nào cũng có marker mức rủi ro (`critical`, `high`, `medium`) và đúng một marker yêu cầu | Giữ `pytest -m critical` và `pytest -m <yêu_cầu>` đầy đủ |
+| Không CSS/XPath trực tiếp trong test | Locator thuộc về `pages/` |
+| Test nào cũng có marker mức rủi ro (`critical`, `high`, `medium`) và đúng một marker yêu cầu | Giữ cho `pytest -m critical` và `pytest -m <yêu cầu>` đầy đủ |
 
 #### B4. Tiêu chí bảo trì (checklist)
 
-- [ ] Yêu cầu REQ-01 … REQ-08 nào cũng có test: `pytest -m <yêu_cầu> --collect-only -q`
-- [ ] Test đọc giống yêu cầu: thao tác và kiểm tra qua page object, không URL hay CSS trong test
-- [ ] Không có locator ngoài `pages/`
+- [ ] Yêu cầu REQ-01 … REQ-06 nào cũng có test: `pytest -m <yêu cầu> --collect-only -q`
+- [ ] Test đọc như yêu cầu: thao tác và kiểm tra qua page object, không có URL hay locator trong test
+- [ ] Không locator nào nằm ngoài `pages/`; giá trị test nằm trong `dataset/`, không nằm trong test
 - [ ] Test nào cũng có docstring, `# Test data`, rồi chỉ các khối `with step(step_number, ...)`; method page nào cũng có docstring dưới banner `# Scope:` (review)
-- [ ] Không chờ cố định, không `force=True` (lệnh tìm ở B3 không ra kết quả)
-- [ ] 0 test flaky trong 3 lần chạy liên tiếp (B2)
-- [ ] Mỗi lần fail đều có trace, ảnh và video
+- [ ] Không chờ cố định, không `force=True` (các lệnh tìm ở B3 không ra kết quả)
+- [ ] 0 test chập chờn qua 3 lần chạy liên tiếp (B2)
+- [ ] Test fail nào cũng để lại trace, ảnh và video
 - [ ] Bộ test pass với `-n auto`
-- [ ] Thông tin bí mật (`SAUCE_PASSWORD`, `.auth/`) không bao giờ đưa lên git
+- [ ] Tài khoản (`.env`) và phiên đăng nhập (`.auth/`) không bao giờ được commit
 
 ### Kết quả mong đợi
 
-| Kiểm tra | Kết quả trên site giả lập |
+| Kiểm tra | Kết quả |
 | --- | --- |
-| Lệnh tìm ở B3 | không có kết quả |
-| 3 lần chạy `pytest` | mỗi lần 35 pass + 1 xfailed, 0 flaky |
+| Các lệnh tìm ở B3 | không có kết quả |
+| Chạy tuần tự + 2 lần song song (`-n 4`) | mỗi lần 42 pass + 1 xfailed, 0 test chập chờn |
 | Cố ý làm fail | `trace.zip`, `test-failed-1.png`, `video.webm` trong `test-results/` |

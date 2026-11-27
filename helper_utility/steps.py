@@ -3,15 +3,15 @@
 The test counts its own steps, like the workplace pattern ``with allure.step(f"Step {step_index}: ...")``:
 
     step_number = 1
-    with step(step_number, "Open the product page of Grey jacket"):
-        shop.product.open_product_page(grey_jacket["path-name"])
+    with step(step_number, "Add Sauce Labs Backpack from the products page"):
+        logged_in_shop.inventory.add_product_to_cart("Sauce Labs Backpack")
     step_number += 1
-    with step(step_number, "Add 1 item to the cart"):
-        shop.product.add_to_cart(1)
+    with step(step_number, "Verify the cart badge shows 1"):
+        expect(logged_in_shop.inventory.cart_badge).to_have_text("1")
 
 Each block becomes:
 
-* an Allure step "Step 1: Open the product page of Grey jacket" - the Allure report shows the test
+* an Allure step "Step 1: Add Sauce Labs Backpack from the products page" - the Allure report shows the test
   as a numbered list, like the workplace pattern ``with allure.step(f"Step {step_index}: ...")``;
 * a group in the Playwright trace - the Trace Viewer of a failed test lists its clicks and waits
   under the step name, so the failing step is found at a glance;

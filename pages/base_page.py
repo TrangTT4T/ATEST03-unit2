@@ -3,17 +3,21 @@
 Locators are plain XPath strings that describe the element, grouped under a comment that names the
 area of the page, at the bottom of each class (the same layout as Unit 1):
 
-    # Cart table
-    _cart_form = "//*[@id='cart']"
-    # Product tiles
-    _tile = "//a[contains(@href,'/products/{}')]"   # a template: self._tile.format(path_name)
+    # Cart list
+    _cart_items = "//*[@data-test='inventory-item']"
+    # Product cards
+    _product_card = "//*[@data-test='inventory-item'][.//*[normalize-space()='{}']]"   # .format(name)
 
-``Helper.by_locator()`` (helper_utility/helpers.py) turns a locator into a Playwright selector:
-plain XPath by default, or "id=...", "name=...", "css=..." when needed.
+Swag Labs marks its elements with ``data-test`` attributes (made for test automation), so most
+locators read ``//*[@data-test='...']``. ``Helper.by_locator()`` (helper_utility/helpers.py) turns a
+locator into a Playwright selector: plain XPath by default, or "id=...", "name=...", "css=...".
 
-Pages never call ``self.page.locator``, ``goto`` or ``expect_*`` themselves: they call the BasePage
-methods, which log the action and name the locator in their errors. Playwright waits on every action
-and ``expect()`` retries, so nothing here sleeps for a fixed time.
+Pages never call ``self.page.locator`` or ``goto`` themselves: they call the BasePage methods, which
+log the action and name the locator in their errors. Playwright waits on every action and
+``expect()`` retries, so nothing here sleeps for a fixed time.
+
+Swag Labs is a single-page app: a click changes the address without loading a new page, so the
+pages wait for the address (``wait_until_url_contains``) rather than for a page load.
 
 Layout of every page object (one class per file):
 
@@ -26,16 +30,14 @@ import logging
 import re
 from collections.abc import Iterator
 
-from playwright.sync_api import Locator, Page, Response
+from playwright.sync_api import Locator, Page
 from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 
 from helper_utility.helpers import Helper
-from helper_utility.store_blocked_error import StoreBlockedError
 
 
 class BasePage:
     path = "/"
-    BOT_CHECK_TITLES = ("Verifying your connection", "Just a moment")  # the store's bot protection page
 
     def __init__(self, page: Page):
         self.page = page
@@ -47,19 +49,23 @@ class BasePage:
     # Scope: Every page
     ############################################################################
     def open_page(self, path: str | None = None):
-        """Go to ``path`` on the store (default: this page's own path).
+        """Go to ``path`` on the shop (default: this page's own path).
 
-        :param path: path after the base URL, e.g. "/cart"
+        :param path: path after the base URL, e.g. "/cart.html"
         """
         self.logger.info("Open %s", path or self.path)
         with self._report_timeout("Opening", path or self.path):
             self.page.goto(path or self.path)  # relative: pytest-playwright gives every context the --base-url
-        self._verify_not_bot_check(f"opening {path or self.path}")
 
     def wait_until_url_contains(self, fragment: str):
-        """Wait until the address contains ``fragment``, for example "/search"."""
+        """Wait until the address contains ``fragment``, for example "/cart.html"."""
         with self._report_timeout("Waiting for the URL to contain", fragment):
             self.page.wait_for_url(re.compile(re.escape(fragment)))
+
+    def wait_until_url_ends_with(self, suffix: str):
+        """Wait until the address ends with ``suffix``, for example "/" for the login page."""
+        with self._report_timeout("Waiting for the URL to end with", suffix):
+            self.page.wait_for_url(re.compile(re.escape(suffix) + "$"))
 
     ############################################################################
     # Locator methods
@@ -71,7 +77,7 @@ class BasePage:
         Playwright locators are lazy: nothing is searched until an action or expect() uses the
         result, and then it waits for the element.
 
-        :param locator: XPath locator, e.g. "//*[@id='cart']"
+        :param locator: XPath locator, e.g. "//*[@data-test='checkout']"
         :return: a Playwright Locator
         """
         return self.find_elements(locator).first
@@ -84,9 +90,17 @@ class BasePage:
         """
         return self.page.locator(self._helper.by_locator(locator))
 
+    def get_texts(self, locator: str) -> list[str]:
+        """The visible text of every element matching ``locator``, in page order.
+
+        :param locator: XPath locator, e.g. the name of every product card
+        :return: the texts, stripped
+        """
+        return [text.strip() for text in self.find_elements(locator).all_inner_texts()]
+
     ############################################################################
     # Action methods
-    # Scope: Every page > click, type, submit
+    # Scope: Every page > click, type, select
     ############################################################################
     def click_element(self, locator: str):
         """Click the element; Playwright first waits until it is visible, stable and enabled.
@@ -96,32 +110,6 @@ class BasePage:
         self.logger.info("Click %s", locator)
         with self._report_timeout("Clicking", locator):
             self.find_element(locator).click()
-
-    def click_and_wait_for_new_page(self, locator: str):
-        """Click a form button and wait for the resulting navigation to finish.
-
-        wait_for_load_state() alone returns at once (the old page is already loaded), so the next
-        goto() could cancel the POST. Unit 1 hit this as findings F7/F8; both units wait here.
-
-        :param locator: XPath locator of the submit button
-        """
-        with self._report_timeout("Waiting for the page loaded by clicking", locator):
-            with self.page.expect_navigation(wait_until="domcontentloaded"):
-                self.click_element(locator)
-
-    def click_and_wait_for_response(self, locator: str, url_part: str, method: str = "POST") -> Response:
-        """Click and wait for the server's answer to the request this click sends (Day 6: network-aware wait).
-
-        :param locator: XPath locator of the element to click
-        :param url_part: part of the request URL, e.g. "/cart/add"
-        :param method: HTTP method of that request
-        :return: the Playwright Response
-        """
-        with self._report_timeout(f"Waiting for the {method} {url_part} answer to clicking", locator):
-            with self.page.expect_response(lambda r: url_part in r.url and r.request.method == method) as answer:
-                self.click_element(locator)
-        self.logger.info("%s %s -> HTTP %s", method, url_part, answer.value.status)
-        return answer.value
 
     def type_text(self, locator: str, text: str, secret: bool = False):
         """Replace the field's text with ``text``.
@@ -133,6 +121,16 @@ class BasePage:
         self.logger.info("Type %r into %s", "***" if secret else text, locator)
         with self._report_timeout("Typing into", locator):
             self.find_element(locator).fill(text)
+
+    def select_option(self, locator: str, label: str):
+        """Choose the option labelled ``label`` in a drop-down list.
+
+        :param locator: XPath locator of the <select>
+        :param label: the visible text of the option, e.g. "Price (low to high)"
+        """
+        self.logger.info("Select %r in %s", label, locator)
+        with self._report_timeout(f"Selecting {label!r} in", locator):
+            self.find_element(locator).select_option(label=label)
 
     ############################################################################
     # State methods
@@ -157,56 +155,51 @@ class BasePage:
 
     ############################################################################
     # Header methods
-    # Scope: Every page > Header (cart link, search box, account links)
+    # Scope: Every page after login > Header (title, cart badge, cart link)
     ############################################################################
     @property
-    def header_cart_link(self) -> Locator:
-        """The header link "My Cart (N)"."""
-        return self.find_element(self._header_cart_link)
+    def page_title(self) -> Locator:
+        """The title under the header, e.g. "Products", "Your Cart", "Checkout: Overview"."""
+        return self.find_element(self._page_title)
 
-    def search_for(self, keyword: str):
-        """Search for ``keyword`` from the header and wait for the results page."""
-        self.type_text(self._search_box, keyword)
-        self.find_element(self._search_box).press("Enter")
-        self.wait_until_url_contains("/search")
-        self._verify_not_bot_check(f"searching for {keyword!r}")
+    @property
+    def cart_badge(self) -> Locator:
+        """The number on the cart icon; absent when the cart is empty."""
+        return self.find_element(self._cart_badge)
 
-    def is_customer_logged_in(self) -> bool:
-        """True when a customer is logged in: the header no longer offers "Log In"."""
-        return not self.is_element_visible(self._login_link)
+    def get_cart_badge_count(self) -> int:
+        """The number on the cart icon, 0 when the cart is empty (the badge is then absent)."""
+        if not self.is_element_visible(self._cart_badge):
+            return 0
+        return int(self.cart_badge.inner_text())
 
-    def open_login_page_from_header(self):
-        """Click the header's "Log In" link and wait for the login page."""
-        self.click_and_wait_for_new_page(self._login_link)
+    def open_cart(self):
+        """Click the cart icon and wait for the cart page."""
+        self.click_element(self._cart_link)
+        self.wait_until_url_contains("/cart.html")
 
-    def open_register_page_from_header(self):
-        """Click the header's "Sign up" link and wait for the registration page."""
-        self.click_and_wait_for_new_page(self._register_link)
-
+    ############################################################################
+    # Menu methods
+    # Scope: Every page after login > Side menu (Logout, Reset App State)
+    ############################################################################
     def logout(self):
-        """Log the customer out: open /account/logout (where the header's Log Out link goes)."""
-        self.open_page(self._logout_path)
+        """Open the side menu, click Logout and wait for the login page."""
+        self.click_element(self._menu_button)
+        self.click_element(self._logout_link)
+        self.wait_until_url_ends_with("/")  # the login page is the root of the shop
 
-    def _verify_not_bot_check(self, action: str):
-        """Stop with a clear error when the store shows its bot check (Cloudflare) instead of the page.
-
-        The check is never bypassed. It usually means too many requests from this network in a short
-        time: the store asks a human to confirm, which an automated test cannot and must not do.
-
-        :param action: what the test was doing, e.g. "opening /cart"
-        """
-        title = self.page.title()
-        if any(check in title for check in self.BOT_CHECK_TITLES):
-            self.logger.error("The store showed its bot check (%r) instead of %s", title, action)
-            raise StoreBlockedError(f"The store asked to verify a human ({title!r}) instead of {action}: too many "
-                                    f"requests from this network. Wait a few minutes, then run again")
+    def reset_app_state(self):
+        """Open the side menu, click Reset App State (empties the cart) and close the menu."""
+        self.click_element(self._menu_button)
+        self.click_element(self._reset_link)
+        self.click_element(self._close_menu_button)
 
     @contextlib.contextmanager
     def _report_timeout(self, action: str, target: str) -> Iterator[None]:
         """Turn a Playwright timeout into an ERROR log line and an error that names the target and the page.
 
         Playwright's own message lists its call log; this one says first what the test was doing,
-        e.g. "Clicking '//*[@id='checkout']' timed out on https://.../cart".
+        e.g. "Clicking '//*[@data-test='checkout']' timed out on https://.../cart.html".
         """
         try:
             yield
@@ -216,10 +209,12 @@ class BasePage:
             raise PlaywrightTimeoutError(f"{message}\n{error}") from error
 
     # --- Locators -------------------------------------------------------------
-    # Header (on every page). Desktop and mobile cart links both say "My Cart (N)"; the first is the desktop one.
-    _header_cart_link = "//a[contains(normalize-space(),'My Cart')]"
-    _search_box = "//input[@name='q']"
-    # Header account links: desktop "Log In" / "Sign up" come first, the hidden mobile ones after
-    _login_link = "//a[contains(@href,'/account/login')]"
-    _register_link = "//a[contains(@href,'/account/register')]"
-    _logout_path = "/account/logout"
+    # Header
+    _page_title = "//*[@data-test='title']"
+    _cart_link = "//*[@data-test='shopping-cart-link']"
+    _cart_badge = "//*[@data-test='shopping-cart-badge']"
+    # Side menu
+    _menu_button = "//*[@id='react-burger-menu-btn']"
+    _close_menu_button = "//*[@id='react-burger-cross-btn']"
+    _logout_link = "//*[@data-test='logout-sidebar-link']"
+    _reset_link = "//*[@data-test='reset-sidebar-link']"

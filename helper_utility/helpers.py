@@ -1,13 +1,13 @@
-"""Helper: what the pages, API objects and tests share - locators, test data, prices, random data.
+"""Helper: what the pages and tests share - locators, test data, prices, random data.
 
 * Element finder: reads a locator string and gives Playwright the selector (the same idea as Unit 1).
   A locator is plain XPath with no prefix (the default, and what every page writes), or
   "prefix=criteria" / "prefix:criteria": "id=cart", "name=q", "css=#cart", "link=...", "partial link=...",
   "tag_name=h1", "class_name=errors", "xpath=//h1".
-* Test data: one JSON file per area in dataset/ (products.json, cart.json, search.json).
-* Prices: "£1,120.00" -> 1120.0 or -> 112000 pence (the store's API counts pence).
-* Random data (Faker): a new customer, an unregistered login, a malformed email - generated at run
-  time, so no account data is written in a file.
+* Test data: one JSON file per area in dataset/ (products, login, catalog, cart, checkout).
+* Prices: "$1,120.00" -> 1120.0.
+* Random data (Faker): checkout details, an unregistered login, a password - generated at run time,
+  so no account data is written in a file.
 
 Kept outside tests/ so pytest never collects it.
 """
@@ -22,8 +22,8 @@ DATASET = Path(__file__).resolve().parents[1] / "dataset"
 
 
 class Helper:
-    MONEY_PATTERN = re.compile(r"£\s?([\d,]+\.\d{2})")  # a text pattern, not a locator
-    _faker = Faker("en_GB")
+    MONEY_PATTERN = re.compile(r"\$\s?([\d,]+\.\d{2})")  # a text pattern, not a locator
+    _faker = Faker("en_US")  # Swag Labs is a US shop: US names and ZIP codes
 
     def __init__(self):
         # {raw}: the criteria as written; {quoted}: the criteria as an XPath string literal
@@ -91,46 +91,38 @@ class Helper:
 
     ############################################################################
     # Prices
-    # Scope: Every page and API > "£1,120.00" amounts
+    # Scope: Every page > "$29.99" amounts
     ############################################################################
     @staticmethod
     def money_to_float(text: str) -> float:
-        """'£1,120.00' -> 1120.0 (the first £ amount in ``text``).
+        """'$1,120.00' (or 'Item total: $29.99') -> 1120.0: the first $ amount in ``text``.
 
-        :raises ValueError: when ``text`` holds no £ amount
+        :raises ValueError: when ``text`` holds no $ amount
         """
         match = Helper.MONEY_PATTERN.search(text)
         if not match:
-            raise ValueError(f"No £ amount found in: {text!r}")
+            raise ValueError(f"No $ amount found in: {text!r}")
         return float(match.group(1).replace(",", ""))
-
-    @staticmethod
-    def money_to_pence(text: str) -> int:
-        """'£1,120.00' -> 112000: the unit the store's JSON API uses for prices and totals."""
-        return round(Helper.money_to_float(text) * 100)
 
     ############################################################################
     # Random data (Faker)
-    # Scope: Account tests > customers and logins made up at run time
+    # Scope: Login and checkout tests > data made up at run time
     ############################################################################
     @staticmethod
-    def random_customer() -> dict:
-        """A new customer: first_name, last_name, a unique example.com email and a strong password."""
-        first_name, last_name = Helper._faker.first_name(), Helper._faker.last_name()
+    def random_checkout_information() -> dict:
+        """A made-up customer for the checkout form: first_name, last_name, postal_code."""
         return {
-            "first_name": first_name,
-            "last_name": last_name,
-            "email": f"{first_name}.{last_name}.{uuid.uuid4().hex[:8]}@example.com".lower(),
-            "password": Helper._faker.password(length=14, special_chars=True, digits=True, upper_case=True),
+            "first_name": Helper._faker.first_name(),
+            "last_name": Helper._faker.last_name(),
+            "postal_code": Helper._faker.postcode(),
         }
 
     @staticmethod
     def random_unregistered_login() -> dict:
-        """An email and password no account has (a unique example.com address)."""
-        customer = Helper.random_customer()
-        return {"email": customer["email"], "password": customer["password"]}
+        """A username no Swag Labs account has and a password: e.g. {"username": "jsmith_4f2a", ...}."""
+        return {"username": f"{Helper._faker.user_name()}_{uuid.uuid4().hex[:4]}", "password": Helper.random_password()}
 
     @staticmethod
-    def random_malformed_email() -> str:
-        """Text that is not an email address (no "@"), e.g. "vitae-2f1c"."""
-        return f"{Helper._faker.word()}-{uuid.uuid4().hex[:4]}"
+    def random_password() -> str:
+        """A strong made-up password (14 characters: upper case, digits, special characters)."""
+        return Helper._faker.password(length=14, special_chars=True, digits=True, upper_case=True)

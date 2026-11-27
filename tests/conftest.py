@@ -1,30 +1,35 @@
-"""Shared fixtures and hooks for the whole suite (Unit 2): UI tests in tests/ui, API tests in tests/api.
+"""Fixtures and hooks for the whole suite (Unit 2): Playwright UI tests of Swag Labs (www.saucedemo.com).
 
-Inherited from Unit 1: the requirements and risks (as markers), the test data
-(dataset/products.json), one fresh state per test. New in Unit 2: plain Playwright tests on pytest -
-fixtures instead of hooks, markers instead of Gherkin tags, network control, tracing, auth state,
-API testing, xdist.
-
-Fixture map (shared here; tests/ui/conftest.py and tests/api/conftest.py add their own):
-  products           test data from dataset/products.json (cart.json, search.json are read by the tests)
-  accounts           made-up accounts (Faker), new for every test
-  real_account       the real customer login from .env (only for -m auth; skips when it is not set)
+Fixture map (Day 5-6):
+  browser (session) -> context (one per test: isolation) -> page (one per test)
+  products           test data from dataset/products.json (the other dataset files are read by the tests)
+  swag_accounts      the Swag Labs demo accounts from .env (standard user, locked-out user); skips when unset
+  accounts           every login a test may need: the demo accounts + made-up ones (Faker), new per test
+  checkout_information  a made-up customer for the checkout form (Faker)
+  shop               Page Objects bound to this test's page
+  logged_in_shop     shop, logged in as the standard user, on the products page
+  fill_cart          factory fixture: add products from the products page
+  saved_login_state  login once, save the storage state (Day 6: authentication state reuse)
   step               numbered test steps: Allure step + trace group (helper_utility/steps.py)
 """
 import os
 import shutil
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from dotenv import load_dotenv
+from playwright.sync_api import Browser, Page
 
 from helper_utility.helpers import Helper
-from helper_utility.store_blocked_error import StoreBlockedError
 from helper_utility.steps import Steps
+from pages import (BasePage, CartPage, CheckoutCompletePage, CheckoutInformationPage, CheckoutOverviewPage,
+                   InventoryPage, LoginPage, ProductPage)
 
 ROOT = Path(__file__).resolve().parent.parent
-load_dotenv(ROOT / ".env")  # the real customer login (for -m auth) lives in .env, which git ignores
+load_dotenv(ROOT / ".env")  # the demo accounts live in .env, which git ignores
 ALLURE_RESULTS = ROOT / "reports" / "allure-results"
+AUTH_FILE = ROOT / ".auth" / "standard_user.json"
 
 
 # --- reports ------------------------------------------------------------------
@@ -38,59 +43,104 @@ def pytest_configure(config):
         shutil.rmtree(ALLURE_RESULTS, ignore_errors=True)
 
 
-@pytest.hookimpl(wrapper=True)
-def pytest_runtest_makereport(item, call):
-    """Report a test the live store blocked (HTTP 429, bot check) as SKIPPED with the reason, not FAILED.
-
-    The store did not answer, so the test checked nothing: the fix is a rerun later, not a code change.
-    The reason is listed at the end of the run (-rs in pytest.ini).
-    """
-    report = yield
-    if call.excinfo is not None and call.excinfo.errisinstance(StoreBlockedError):
-        path, line, _ = item.reportinfo()
-        report.outcome = "skipped"
-        report.longrepr = (str(path), (line or 0) + 1, f"Store blocked this network: {call.excinfo.value}")
-    return report
+# --- browser context (isolation) ------------------------------------------------
+@pytest.fixture(scope="session")
+def browser_context_args(browser_context_args):
+    """Every test gets a fresh context with these options: own cookies, own cart (localStorage)."""
+    return {**browser_context_args, "viewport": {"width": 1366, "height": 900}, "locale": "en-US"}
 
 
 # --- data ---------------------------------------------------------------------
 @pytest.fixture(scope="session")
 def products() -> dict:
-    """Every product by name, from dataset/products.json (path-name, price, status, type, vendor, options)."""
+    """Every product by name, from dataset/products.json (id, price, description)."""
     return Helper.read_test_data("products")["products"]
 
 
-@pytest.fixture
-def accounts() -> dict:
-    """Made-up accounts for the login and registration tests, new for every test (Faker).
+@pytest.fixture(scope="session")
+def swag_accounts() -> dict:
+    """The Swag Labs demo accounts from .env: "standard-user" and "locked-out-user" (username, password).
 
-    Nothing is written in a file: the names, emails and passwords are generated at run time. Only a
-    REAL customer login (for -m auth) comes from .env (SAUCE_EMAIL / SAUCE_PASSWORD).
+    Skips the test when .env is missing: copy .env.example to .env and fill in the accounts listed on
+    the Swag Labs login page. No account is written in a file that goes to GitHub.
     """
-    customer = Helper.random_customer()
+    names = ("SWAG_USERNAME", "SWAG_LOCKED_OUT_USERNAME", "SWAG_PASSWORD")
+    missing = [name for name in names if not os.getenv(name)]
+    if missing:
+        pytest.skip(f"Set {', '.join(missing)} in .env (copy .env.example; the values are on the login page)")
+    password = os.environ["SWAG_PASSWORD"]
     return {
-        "new-customer": customer,
-        "customer-without-email": {**customer, "email": ""},
-        "unknown-user": Helper.random_unregistered_login(),
-        "malformed-email": {"email": Helper.random_malformed_email(), "password": customer["password"]},
+        "standard-user": {"username": os.environ["SWAG_USERNAME"], "password": password},
+        "locked-out-user": {"username": os.environ["SWAG_LOCKED_OUT_USERNAME"], "password": password},
     }
 
 
-@pytest.fixture(scope="session")
-def real_account() -> dict:
-    """The real customer login (email, password) from .env: SAUCE_EMAIL / SAUCE_PASSWORD, for -m auth.
+@pytest.fixture
+def accounts(swag_accounts) -> dict:
+    """Every login of dataset/login.json by name: the demo accounts + made-up ones (Faker), new per test."""
+    standard_user = swag_accounts["standard-user"]
+    return {
+        **swag_accounts,
+        "unknown-user": Helper.random_unregistered_login(),
+        "wrong-password": {"username": standard_user["username"], "password": Helper.random_password()},
+        "missing-username": {"username": "", "password": standard_user["password"]},
+        "missing-password": {"username": standard_user["username"], "password": ""},
+    }
 
-    Skips the test when they are not set. The password is never logged (type_text(secret=True)).
-    """
-    email, password = os.getenv("SAUCE_EMAIL"), os.getenv("SAUCE_PASSWORD")
-    if not (email and password):
-        pytest.skip("Set SAUCE_EMAIL and SAUCE_PASSWORD in .env to run the @auth tests")
-    return {"email": email, "password": password}
+
+@pytest.fixture
+def checkout_information() -> dict:
+    """A made-up customer for the checkout form (Faker): first_name, last_name, postal_code."""
+    return Helper.random_checkout_information()
+
+
+# --- page objects ---------------------------------------------------------------
+@pytest.fixture
+def shop(page: Page) -> SimpleNamespace:
+    """Every Page Object, bound to this test's page: shop.login, shop.inventory, shop.cart ..."""
+    return SimpleNamespace(
+        home=BasePage(page), login=LoginPage(page), inventory=InventoryPage(page), product=ProductPage(page),
+        cart=CartPage(page), checkout_information=CheckoutInformationPage(page),
+        checkout_overview=CheckoutOverviewPage(page), checkout_complete=CheckoutCompletePage(page),
+    )
+
+
+@pytest.fixture
+def logged_in_shop(shop, swag_accounts) -> SimpleNamespace:
+    """``shop``, logged in as the standard user through the login form, on the products page."""
+    standard_user = swag_accounts["standard-user"]
+    shop.login.open_page()
+    shop.login.login_and_wait_for_products(standard_user["username"], standard_user["password"])
+    return shop
+
+
+@pytest.fixture
+def fill_cart(logged_in_shop):
+    """Factory fixture: fill_cart(["Sauce Labs Backpack", ...]) adds the products from the products page."""
+    def add_products(product_names: list[str]):
+        logged_in_shop.inventory.add_products_to_cart(product_names)
+        return logged_in_shop
+    return add_products
+
+
+# --- authentication state (Day 6) ------------------------------------------------
+@pytest.fixture(scope="session")
+def saved_login_state(browser: Browser, base_url: str, swag_accounts) -> Path:
+    """Log in once per session and save cookies + localStorage; a test opens a context from the file."""
+    context = browser.new_context(base_url=base_url)
+    login = LoginPage(context.new_page())
+    login.open_page()
+    standard_user = swag_accounts["standard-user"]
+    login.login_and_wait_for_products(standard_user["username"], standard_user["password"])
+    AUTH_FILE.parent.mkdir(exist_ok=True)
+    context.storage_state(path=str(AUTH_FILE))
+    context.close()
+    return AUTH_FILE
 
 
 # --- test steps ---------------------------------------------------------------
 @pytest.fixture
 def step(request) -> Steps:
-    """``with step("Add 1 item to the cart"):`` - numbered for you: Step 1, Step 2, ..."""
+    """``with step(step_number, "Add 1 item to the cart"):`` - Step 1, Step 2 ... in Allure and the trace."""
     page = request.getfixturevalue("page") if "page" in request.fixturenames else None
     return Steps(page)
