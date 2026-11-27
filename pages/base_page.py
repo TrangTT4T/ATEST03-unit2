@@ -21,8 +21,10 @@ Layout of every page object (one class per file):
 * a docstring on every public method and property;
 * a ``# --- Locators ---`` section at the BOTTOM of the class: XPath strings, grouped by area.
 """
+import contextlib
 import logging
 import re
+from collections.abc import Iterator
 
 from playwright.sync_api import Locator, Page, Response
 from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
@@ -32,28 +34,12 @@ from helper_utility.helpers import Helper
 
 class BasePage:
     path = "/"
-    MONEY_PATTERN = re.compile(r"£\s?([\d,]+\.\d{2})")  # a text pattern, not a locator
+    BOT_CHECK_TITLES = ("Verifying your connection", "Just a moment")  # the store's bot protection page
 
     def __init__(self, page: Page):
         self.page = page
         self.logger = logging.getLogger(type(self).__name__)  # in the report of a failed test
-        self._helper = Helper()  # reads locators: locator string -> Playwright selector
-
-    ############################################################################
-    # Data helpers (no browser needed)
-    # Scope: Every page > prices
-    ############################################################################
-    @staticmethod
-    def money_to_float(text: str) -> float:
-        """'£1,120.00' -> 1120.0
-
-        :param text: any text with one £ amount in it
-        :return: the amount as a float
-        """
-        match = BasePage.MONEY_PATTERN.search(text)
-        if not match:
-            raise ValueError(f"No £ amount found in: {text!r}")
-        return float(match.group(1).replace(",", ""))
+        self._helper = Helper()  # locators, prices, test data
 
     ############################################################################
     # Navigation methods
@@ -65,11 +51,18 @@ class BasePage:
         :param path: path after the base URL, e.g. "/cart"
         """
         self.logger.info("Open %s", path or self.path)
-        self.page.goto(path or self.path)  # relative: pytest-playwright gives every context the --base-url
+        with self._report_timeout("Opening", path or self.path):
+            self.page.goto(path or self.path)  # relative: pytest-playwright gives every context the --base-url
+        title = self.page.title()
+        if any(check in title for check in self.BOT_CHECK_TITLES):  # never bypassed: report it clearly
+            self.logger.error("The store showed its bot check (%r) instead of %s", title, path or self.path)
+            raise AssertionError(f"The store asked to verify a human ({title!r}) "
+                                 f"instead of opening {path or self.path}")
 
     def wait_until_url_contains(self, fragment: str):
         """Wait until the address contains ``fragment``, for example "/search"."""
-        self.page.wait_for_url(re.compile(re.escape(fragment)))
+        with self._report_timeout("Waiting for the URL to contain", fragment):
+            self.page.wait_for_url(re.compile(re.escape(fragment)))
 
     ############################################################################
     # Locator methods
@@ -104,7 +97,8 @@ class BasePage:
         :param locator: XPath locator
         """
         self.logger.info("Click %s", locator)
-        self.find_element(locator).click()
+        with self._report_timeout("Clicking", locator):
+            self.find_element(locator).click()
 
     def click_and_wait_for_new_page(self, locator: str):
         """Click a form button and wait for the resulting navigation to finish.
@@ -114,8 +108,9 @@ class BasePage:
 
         :param locator: XPath locator of the submit button
         """
-        with self.page.expect_navigation(wait_until="domcontentloaded"):
-            self.click_element(locator)
+        with self._report_timeout("Waiting for the page loaded by clicking", locator):
+            with self.page.expect_navigation(wait_until="domcontentloaded"):
+                self.click_element(locator)
 
     def click_and_wait_for_response(self, locator: str, url_part: str, method: str = "POST") -> Response:
         """Click and wait for the server's answer to the request this click sends (Day 6: network-aware wait).
@@ -125,8 +120,9 @@ class BasePage:
         :param method: HTTP method of that request
         :return: the Playwright Response
         """
-        with self.page.expect_response(lambda r: url_part in r.url and r.request.method == method) as answer:
-            self.click_element(locator)
+        with self._report_timeout(f"Waiting for the {method} {url_part} answer to clicking", locator):
+            with self.page.expect_response(lambda r: url_part in r.url and r.request.method == method) as answer:
+                self.click_element(locator)
         self.logger.info("%s %s -> HTTP %s", method, url_part, answer.value.status)
         return answer.value
 
@@ -138,7 +134,8 @@ class BasePage:
         :param secret: a password: the log shows *** instead of the text
         """
         self.logger.info("Type %r into %s", "***" if secret else text, locator)
-        self.find_element(locator).fill(text)
+        with self._report_timeout("Typing into", locator):
+            self.find_element(locator).fill(text)
 
     ############################################################################
     # State methods
@@ -175,6 +172,20 @@ class BasePage:
         self.type_text(self._search_box, keyword)
         self.find_element(self._search_box).press("Enter")
         self.wait_until_url_contains("/search")
+
+    @contextlib.contextmanager
+    def _report_timeout(self, action: str, target: str) -> Iterator[None]:
+        """Turn a Playwright timeout into an ERROR log line and an error that names the target and the page.
+
+        Playwright's own message lists its call log; this one says first what the test was doing,
+        e.g. "Clicking '//*[@id='checkout']' timed out on https://.../cart".
+        """
+        try:
+            yield
+        except PlaywrightTimeoutError as error:
+            message = f"{action} {target!r} timed out on {self.page.url}"
+            self.logger.error(message)
+            raise PlaywrightTimeoutError(f"{message}\n{error}") from error
 
     # --- Locators -------------------------------------------------------------
     # Header (on every page). Desktop and mobile cart links both say "My Cart (N)"; the first is the desktop one.

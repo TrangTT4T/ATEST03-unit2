@@ -7,38 +7,64 @@ Requirements: @add_to_cart (REQ-01), @update_cart (REQ-02), @product_details (RE
 """
 import pytest
 
+from helper_utility.helpers import Helper
+
 pytestmark = [pytest.mark.api, pytest.mark.regression]
+CART = Helper.read_test_data("cart")
 
 
 @pytest.mark.critical
 @pytest.mark.add_to_cart
-def test_cart_api_adds_the_product_and_totals_the_price(shop_api, products, step):
-    """Adding 2 Noir jackets through the API gives a cart of 2 items, total £120.00."""
+@pytest.mark.parametrize("case", CART["add"], ids=[case["id"] for case in CART["add"]])
+def test_cart_api_adds_the_product_and_totals_the_price(shop_api, products, step, case):
+    """Adding N items of one product gives a cart of N items at N times the price (dataset/cart.json "add")."""
     # Test data
-    noir_jacket = products["Noir jacket"]
-    quantity = 2
+    product = products[case["product"]]
+    total_in_pence = Helper.money_to_pence(case["total"])
 
     # Execution steps
-    with step(f"POST /cart/add.js: {quantity} x Noir jacket"):
-        response = shop_api.cart.add_product_to_cart(noir_jacket["path-name"], quantity)
+    with step(f"POST /cart/add.js: {case['quantity']} x {case['product']}"):
+        response = shop_api.cart.add_product_to_cart(product["path-name"], case["quantity"])
         assert response.status == 200, response.text()
-    with step("Verify /cart.js: 2 items, total 12000 pence, one line of Noir jacket"):
+    with step(f"Verify /cart.js: {case['quantity']} items, total {total_in_pence} pence, one line"):
         cart = shop_api.cart.get_cart()
-        assert cart["item_count"] == quantity
-        assert cart["total_price"] == 12000
-        assert [line["product_title"] for line in cart["items"]] == ["Noir jacket"]
+        assert cart["item_count"] == case["quantity"]
+        assert cart["total_price"] == total_in_pence
+        assert [line["product_title"] for line in cart["items"]] == [case["product"]]
 
 
 @pytest.mark.critical
 @pytest.mark.update_cart
-def test_cart_api_removes_a_line_set_to_zero(shop_api, products, step):
-    """Setting the only cart line to quantity 0 empties the cart."""
+@pytest.mark.parametrize("case", CART["change"], ids=[case["id"] for case in CART["change"]])
+def test_cart_api_changes_the_quantity_of_a_line(shop_api, products, step, case):
+    """Changing a line's quantity updates the item count and the total (dataset/cart.json "change")."""
     # Test data
-    striped_top = products["Striped top"]
+    product = products[case["product"]]
+    total_in_pence = Helper.money_to_pence(case["total"])
 
     # Execution steps
-    with step("POST /cart/add.js: 1 x Striped top"):
-        shop_api.cart.add_product_to_cart(striped_top["path-name"], 1)
+    with step(f"POST /cart/add.js: {case['from']} x {case['product']}"):
+        shop_api.cart.add_product_to_cart(product["path-name"], case["from"])
+    with step(f"POST /cart/change.js: line 1 -> quantity {case['to']}"):
+        response = shop_api.cart.change_cart_line_quantity(1, case["to"])
+        assert response.status == 200, response.text()
+    with step(f"Verify /cart.js: {case['to']} items, total {total_in_pence} pence"):
+        cart = shop_api.cart.get_cart()
+        assert cart["item_count"] == case["to"]
+        assert cart["total_price"] == total_in_pence
+
+
+@pytest.mark.critical
+@pytest.mark.update_cart
+@pytest.mark.parametrize("case", CART["remove"], ids=[case["id"] for case in CART["remove"]])
+def test_cart_api_removes_a_line_set_to_zero(shop_api, products, step, case):
+    """Setting the only cart line to quantity 0 empties the cart (dataset/cart.json "remove")."""
+    # Test data
+    product = products[case["product"]]
+
+    # Execution steps
+    with step(f"POST /cart/add.js: 1 x {case['product']}"):
+        shop_api.cart.add_product_to_cart(product["path-name"], 1)
     with step("POST /cart/change.js: line 1 -> quantity 0"):
         response = shop_api.cart.change_cart_line_quantity(1, 0)
         assert response.status == 200, response.text()

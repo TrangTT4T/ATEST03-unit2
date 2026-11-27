@@ -18,12 +18,15 @@ Nội dung: Day 5 – Kiến trúc · Day 6 – Tracing, network, đăng nhập,
 ATEST03-unit2/
 ├── pytest.ini                   # base_url, tracing, báo cáo, marker (--strict-markers)
 ├── requirements.txt
-├── dataset/products.json        # cùng dữ liệu test với Unit 1
-├── .env.example                 # danh sách biến tài khoản; chép thành .env (git bỏ qua .env nên không bao giờ bị push)
+├── dataset/                     # dữ liệu test, mỗi khu vực một file JSON (Helper.read_test_data("<khu vực>"))
+│   ├── products.json            #   7 sản phẩm: path-name, giá, tình trạng hàng, loại, hãng, option
+│   ├── cart.json                #   các ca thêm / đổi số lượng / xoá, kèm tổng tiền mong đợi
+│   └── search.json              #   từ khoá có kết quả (chữ hoa, một phần của từ ...) và từ khoá không có kết quả
+├── .env.example                 # chỉ SAUCE_EMAIL / SAUCE_PASSWORD (pytest -m auth); git bỏ qua .env nên không bao giờ bị push
 ├── api/                         # API object, mỗi khu vực một class như pages/: BaseApi, ProductApi, CartApi, SearchApi
 ├── pages/                       # Page Object Playwright (chuyển từ Unit 1): mỗi file một class
 └── tests/
-    ├── conftest.py              # dùng chung: products, accounts (.env), step, báo cáo
+    ├── conftest.py              # dùng chung: products, accounts (Faker), step, báo cáo
     ├── ui/                      # test giao diện (trình duyệt + page object); conftest: shop, kiểm soát network, đăng nhập
     │   ├── test_cart.py  test_checkout.py  test_catalog.py
     │   ├── test_login.py test_register.py  test_search.py   # mỗi khu vực một file, mỗi yêu cầu một marker
@@ -49,7 +52,7 @@ Unit 2 giữ CÁI GÌ Unit 1 kiểm thử (yêu cầu, rủi ro, dữ liệu) v�
 | --- | --- | --- |
 | `tests/features/*.feature` (14 scenario) | Mỗi scenario thành một test pytest trong `tests/ui/test_<khu_vực>.py`; bảng Examples thành `@pytest.mark.parametrize` | Viết lại thành test thường |
 | Tag yêu cầu `@add_to_cart` … | Marker `@pytest.mark.add_to_cart` …, khai báo trong `pytest.ini` | Kế thừa |
-| `dataset/products.json` | Cùng file | Kế thừa |
+| `dataset/products.json` | Cùng file, thêm loại, hãng, option; thêm `cart.json`, `search.json` | Kế thừa và mở rộng |
 | Tag `@critical`, `@smoke`, `@negative` | Cùng tên, thành marker pytest: `pytest -m smoke`; khu vực là file: `pytest tests/ui/test_cart.py` | Kế thừa |
 | Page Object (`pages/`) | Cùng tên class, dùng `Locator` của Playwright thay `WebElement` | Chuyển đổi |
 | Hook trong `tests/environment.py` | Fixture trong `tests/conftest.py` | Thay thế |
@@ -126,8 +129,8 @@ Các quy tắc bố cục này được kiểm trong review (Day 8, checklist B4
 | --- | --- | --- | --- |
 | `browser`, `context`, `page` | session / test / test | `before_scenario` + `after_scenario` | pytest-playwright cung cấp |
 | `browser_context_args` | session | option trong `_make_driver()` | Viewport 1366×900, locale en-GB |
-| `products` | session | `before_all` đọc JSON | Đọc `dataset/products.json` |
-| `accounts` | session | — | Tài khoản theo tên (`unknown-user`, `new-customer` …) dựng từ `.env`; git bỏ qua `.env` nên không email hay mật khẩu nào lên GitHub. Thiếu biến thì các test tài khoản được bỏ qua, kèm tên biến |
+| `products` | session | `before_all` đọc JSON | `Helper.read_test_data("products")` |
+| `accounts` | test | — | Tài khoản theo tên (`unknown-user`, `new-customer`, `customer-without-email`, `malformed-email`), Faker tạo mới cho mỗi test: không email hay mật khẩu nào nằm trong file |
 | `shop` | test | `Helper.create_page_object()` | Mọi Page Object gắn với page của test |
 | `add_product_and_open_cart` | test | code của step Given | Factory: `add_product_and_open_cart("Noir jacket", 2)` |
 | `block_third_party` | test, autouse | — | Kiểm soát network (Day 6) |
@@ -144,6 +147,38 @@ def add_product_and_open_cart(shop, products):
         return shop.cart
     return _add
 ```
+
+
+### 4b. Dữ liệu test (`dataset/`) và dữ liệu sinh ngẫu nhiên (Faker)
+
+Test không tự chứa giá trị: mỗi khu vực một file JSON, đọc bằng `Helper.read_test_data("<khu vực>")`, và test có parametrize chạy một lần cho mỗi ca. Thêm ca mới là thêm một dòng trong file, không phải viết code mới.
+
+| File | Chứa | Dùng ở |
+| --- | --- | --- |
+| `products.json` | 7 sản phẩm: `path-name`, `price`, `status`, `type`, `vendor`, `options` (Size, Color …) | fixture `products`: test catalog, sản phẩm, giỏ hàng, product API |
+| `cart.json` | `add` (sản phẩm × số lượng → tổng), `change` (từ → thành → tổng), `remove` | `test_cart.py`, `test_cart_api.py` (cùng các ca trên trình duyệt và qua API) |
+| `search.json` | `matching` (từ khoá → sản phẩm mong đợi: "jacket", "JACKET", "jack", "sandals", "heels"), `no_match` ("zzqqxx", "<script>") | `test_search.py`, `test_search_api.py` |
+
+```python
+CART = Helper.read_test_data("cart")
+
+@pytest.mark.parametrize("case", CART["add"], ids=[case["id"] for case in CART["add"]])
+def test_cart_total_equals_price_times_quantity(add_product_and_open_cart, step, case):
+    ...
+```
+
+Dữ liệu tài khoản không bao giờ nằm trong file: fixture `accounts` dùng Faker tạo tài khoản mới cho mỗi test (`Helper.random_customer()`: tên, email `…@example.com` không trùng, mật khẩu mạnh; `random_unregistered_login()`, `random_malformed_email()`). Chỉ tài khoản thật cho `pytest -m auth` lấy từ `.env`.
+
+`Helper` (`helper_utility/helpers.py`) là phần dùng chung của page, API object và test:
+
+| Nhóm | Method |
+| --- | --- |
+| Element finder | `by_locator()`: locator string → selector Playwright; prefix lạ thì báo `ValueError` |
+| Dữ liệu test | `read_test_data(area)`: thiếu file thì báo `FileNotFoundError` kèm danh sách khu vực có sẵn |
+| Giá tiền | `money_to_float("£1,120.00")` → 1120.0; `money_to_pence("£1,120.00")` → 112000 (đơn vị của API) |
+| Dữ liệu ngẫu nhiên | `random_customer()`, `random_unregistered_login()`, `random_malformed_email()` |
+
+`BasePage` báo lỗi rõ ràng: mọi thao tác chờ và thao tác chính đều chạy trong `_report_timeout()`, nên khi Playwright hết thời gian chờ thì log một dòng ERROR và nói test đang làm gì, trên trang nào ("Clicking '//*[@id='checkout']' timed out on https://…/cart"), kèm call log của Playwright. `open_page()` dừng với thông báo rõ ràng khi store hiện trang kiểm tra bot ("Verifying your connection") thay vì trang cần mở; không bao giờ tìm cách vượt qua.
 
 ### 5. Assertion
 
@@ -212,7 +247,7 @@ Hai quy tắc này nằm trong checklist review (Day 8, B4).
 cd ATEST03-unit2
 pip install -r requirements.txt
 playwright install chromium
-pytest --collect-only -q          # 29 test giao diện (23 chạy mặc định) + 13 test API
+pytest --collect-only -q          # 37 test giao diện (31 chạy mặc định) + 30 test API
 pytest -m smoke                   # cùng tag smoke như Unit 1
 pytest --headed --slowmo 300      # xem trình duyệt chạy
 ```
@@ -319,10 +354,10 @@ Các trang của store gọi một API JSON (Shopify AJAX API). Test thẳng API
 
 | Test | Kiểm tra | Yêu cầu |
 | --- | --- | --- |
-| `test_product_api.py`: `test_product_api_returns_the_catalog_name_price_and_stock` (×7), `test_unknown_product_returns_404` | tên, giá (pence), `available` khớp `dataset/products.json`; 404 cho sản phẩm không tồn tại | REQ-04 |
-| `test_cart_api.py`: `test_cart_api_adds_the_product_and_totals_the_price`, `test_cart_api_removes_a_line_set_to_zero` | 2 × Noir jacket → 2 món, 12000 pence; dòng → 0 → giỏ trống | REQ-01, REQ-02 |
+| `test_product_api.py`: `…_returns_the_catalog_name_price_and_stock` (×7), `…_returns_the_catalog_type_vendor_and_options` (×7), `test_unknown_product_returns_404` | tên, giá (pence), `available`, loại, hãng, option khớp `dataset/products.json`; 404 cho sản phẩm không tồn tại | REQ-04 |
+| `test_cart_api.py`: `…_adds_the_product_and_totals_the_price` (×4), `…_changes_the_quantity_of_a_line` (×2), `…_removes_a_line_set_to_zero` | các ca trong `dataset/cart.json`: số món và tổng tiền (pence) | REQ-01, REQ-02 |
 | `test_cart_api.py`: `test_cart_api_refuses_a_sold_out_product` | **xfail, phát hiện A1** | REQ-04 |
-| `test_search_api.py`: `…_suggests_matching_products`, `…_suggests_nothing_for_an_unknown_keyword` | gợi ý cho "jacket" / không có gì cho "zzqqxx" | REQ-08 |
+| `test_search_api.py`: `…_suggests_matching_products`, `…_suggests_nothing_for_an_unknown_keyword` | các ca trong `dataset/search.json`: gợi ý mong đợi / không có gì | REQ-08 |
 | `tests/ui/test_cart.py`: `test_cart_prepared_through_the_api_shows_in_the_browser` | API để chuẩn bị, trình duyệt để kiểm tra | REQ-01 |
 
 **Phát hiện A1:** Brown Shades đang hết hàng (`"available": false`, trang sản phẩm hiện nút "Sold Out" bị khoá), nhưng `POST /cart/add.js` vẫn thêm được (HTTP 200, giỏ có 1 món). Test giao diện pass; chỉ test API thấy lỗi này. Test ghi hành vi đúng (phải bị từ chối) và được đánh dấu `xfail(strict=True)` kèm mô tả: báo cáo liệt kê nó là lỗi đã biết, và khi store sửa xong thì test pass, `strict` làm lần chạy fail để nhắc bỏ marker.
@@ -440,8 +475,8 @@ pytest -m "critical and not negative"
 
 | Kiểm tra | Kết quả |
 | --- | --- |
-| `pytest` | 35 pass (23 giao diện + 12 API), 1 xfailed (API, phát hiện A1), 6 bị lọc (`auth` ×2, `manual` ×3, `data_creating` ×1) |
-| `pytest -n auto` | 35 pass, 1 xfailed |
+| `pytest` | 60 pass (31 giao diện + 29 API), 1 xfailed (API, phát hiện A1), 6 bị lọc (`auth` ×2, `manual` ×3, `data_creating` ×1) |
+| `pytest -n auto` | 60 pass, 1 xfailed |
 | `pytest -m auth` (có tài khoản) | 2 pass |
 | Test fail | `test-results/<test>/trace.zip`, ảnh, video |
 

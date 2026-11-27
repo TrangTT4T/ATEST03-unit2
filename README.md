@@ -27,16 +27,18 @@ Unit 2 is **plain Playwright**: tests are pytest functions that drive page objec
 ATEST03-unit2/
 ├── pytest.ini                   # base_url, tracing, reports, markers (--strict-markers)
 ├── requirements.txt
-├── dataset/
-│   └── products.json            # Unit 1 test data
-├── .env.example                 # account variables to copy into .env (git ignores .env: never pushed)
+├── dataset/                     # test data, one JSON file per area: Helper.read_test_data("<area>")
+│   ├── products.json            #   7 products: path-name, price, stock status, type, vendor, options
+│   ├── cart.json                #   add / change / remove cases with expected totals
+│   └── search.json              #   matching keywords and keywords with no match
+├── .env.example                 # SAUCE_EMAIL / SAUCE_PASSWORD only, for -m auth (git ignores .env: never pushed)
 ├── api/                         # API objects, one class per area like pages/: BaseApi (logged GET/POST),
 │                                #   ProductApi, CartApi, SearchApi (Shopify AJAX API), NetworkApi (page traffic);
 │                                #   all request handling lives here, tests only call and check
 ├── pages/                       # Page Objects: one class per file, locator strings at the bottom;
-│                                #   BasePage = find_element(s), click/type/wait methods, money_to_float()
+│                                #   BasePage = find_element(s), click/type/wait methods (timeouts name the step), bot check
 ├── tests/
-│   ├── conftest.py              # shared: products, accounts (.env), step, reports
+│   ├── conftest.py              # shared: products, accounts (Faker), step, reports
 │   ├── ui/                      # UI tests: browser + page objects
 │   │   ├── conftest.py          # shop, add_product_and_open_cart, block_third_party, shop_api_in_browser, saved login
 │   │   ├── test_cart.py         # @add_to_cart, @update_cart        (Critical)
@@ -52,7 +54,7 @@ ATEST03-unit2/
 │       ├── test_product_api.py  # @product_details
 │       ├── test_cart_api.py     # @add_to_cart, @update_cart (+ finding A1)
 │       └── test_search_api.py   # @search_products
-├── helper_utility/helpers.py    # class Helper: by_locator() = locator string -> Playwright selector
+├── helper_utility/helpers.py    # class Helper: by_locator(), read_test_data(), money_to_float/pence(), random_customer() (Faker)
 ├── helper_utility/steps.py      # the `step` fixture: numbered steps -> Allure step + trace group
 └── docs/Unit2_Playwright_vi.md, Unit2_Playwright_en.md
 ```
@@ -63,9 +65,9 @@ Requires **Python 3.12**: the version in `.python-version` (PyCharm, VS Code, py
 
 ```bash
 pip install -r requirements.txt
-cp .env.example .env                 # then fill in the account values (only for -m auth / manual / data_creating)
+cp .env.example .env                 # only for -m auth: a real account (other tests make up accounts with Faker)
 playwright install chromium
-pytest                               # 23 UI + 13 API tests; manual/data_creating/auth excluded
+pytest                               # 31 UI + 30 API tests; manual/data_creating/auth excluded
 pytest tests/api                     # the API tests only (no browser, about 5 s)
 pytest tests/ui                      # the UI tests only
 pytest -m smoke
@@ -98,10 +100,14 @@ def test_add_an_in_stock_product_to_the_cart(shop, products, step):
         shop.product.open_product_page(grey_jacket["path-name"])
     with step("Add 1 item to the cart"):
         shop.product.add_to_cart(1)
-    with step("Verify the cart has 1 item, total £55.00"):
+    with step(f"Verify the cart has 1 item, total {grey_jacket['price']}"):
         shop.cart.open_page()
-        verify_cart_contents(shop.cart, 1, "£55.00")
+        verify_cart_contents(shop.cart, 1, grey_jacket["price"])
 ```
+
+## Test data
+
+No test writes its own values: each area has a JSON file in `dataset/` (`products.json`, `cart.json`, `search.json`), read with `Helper.read_test_data("<area>")`, and a parametrized test runs once per case: a new case is a new line in the file. Accounts are made up by Faker for every test (`Helper.random_customer()`), so no email or password is written in any file; only `pytest -m auth` reads a real account from `.env`. Details: Day 5 section 4b of the unit document.
 
 ## Reports
 

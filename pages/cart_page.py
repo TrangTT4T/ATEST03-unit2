@@ -49,7 +49,7 @@ class CartPage(BasePage):
         match = self.TOTAL_PATTERN.search(text)
         if match:
             return float(match.group(2).replace(",", ""))
-        return self.money_to_float(re.findall(r"£\s?[\d,]+\.\d{2}", text)[-1])
+        return self._helper.money_to_float(re.findall(r"£\s?[\d,]+\.\d{2}", text)[-1])
 
     def click_checkout(self):
         """Click Check Out and wait for the checkout page."""

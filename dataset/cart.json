@@ -1,0 +1,15 @@
+{
+  "add": [
+    {"id": "grey-jacket-x1",    "product": "Grey jacket",    "quantity": 1, "total": "£55.00"},
+    {"id": "noir-jacket-x2",    "product": "Noir jacket",    "quantity": 2, "total": "£120.00"},
+    {"id": "striped-top-x3",    "product": "Striped top",    "quantity": 3, "total": "£150.00"},
+    {"id": "bronze-sandals-x4", "product": "Bronze sandals", "quantity": 4, "total": "£159.96"}
+  ],
+  "change": [
+    {"id": "bronze-sandals-1-to-2", "product": "Bronze sandals", "from": 1, "to": 2, "total": "£79.98"},
+    {"id": "noir-jacket-3-to-1",    "product": "Noir jacket",    "from": 3, "to": 1, "total": "£60.00"}
+  ],
+  "remove": [
+    {"id": "striped-top", "product": "Striped top"}
+  ]
+}

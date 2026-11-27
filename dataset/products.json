@@ -1,11 +1,32 @@
 {
   "products": {
-    "Black heels":    {"path-name": "flower-print-jeans", "price": "£45.00", "status": "available"},
-    "Bronze sandals": {"path-name": "bronze-sandals",     "price": "£39.99", "status": "available"},
-    "Brown Shades":   {"path-name": "brown-shades",       "price": "£20.00", "status": "sold out"},
-    "Grey jacket":    {"path-name": "grey-jacket",        "price": "£55.00", "status": "available"},
-    "Noir jacket":    {"path-name": "noir-jacket",        "price": "£60.00", "status": "available"},
-    "Striped top":    {"path-name": "striped-top",        "price": "£50.00", "status": "available"},
-    "White sandals":  {"path-name": "white-sandals",      "price": "£25.00", "status": "sold out"}
+    "Black heels": {
+      "path-name": "flower-print-jeans", "price": "£45.00", "status": "available",
+      "type": "Jeans", "vendor": "Sauce Demo", "options": {"Size": ["S", "M", "L"], "Color": ["Red"]}
+    },
+    "Bronze sandals": {
+      "path-name": "bronze-sandals", "price": "£39.99", "status": "available",
+      "type": "Shoes", "vendor": "Sauce Demo", "options": {}
+    },
+    "Brown Shades": {
+      "path-name": "brown-shades", "price": "£20.00", "status": "sold out",
+      "type": "Sunglasses", "vendor": "Sauce Demo", "options": {}
+    },
+    "Grey jacket": {
+      "path-name": "grey-jacket", "price": "£55.00", "status": "available",
+      "type": "Jackets", "vendor": "Sauce Demo", "options": {}
+    },
+    "Noir jacket": {
+      "path-name": "noir-jacket", "price": "£60.00", "status": "available",
+      "type": "Jackets", "vendor": "Sauce Demo", "options": {"Size": ["S", "M", "L"], "Color": ["Blue", "Red"]}
+    },
+    "Striped top": {
+      "path-name": "striped-top", "price": "£50.00", "status": "available",
+      "type": "Tops", "vendor": "ASOS", "options": {}
+    },
+    "White sandals": {
+      "path-name": "white-sandals", "price": "£25.00", "status": "sold out",
+      "type": "Shoes", "vendor": "Sauce Demo", "options": {}
+    }
   }
 }

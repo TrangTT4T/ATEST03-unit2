@@ -14,7 +14,7 @@ pytestmark = [pytest.mark.high, pytest.mark.secure_login]
 
 @pytest.mark.manual
 @pytest.mark.negative
-@pytest.mark.parametrize("account_name", ["unknown-user", "malformed-email"])  # accounts come from .env
+@pytest.mark.parametrize("account_name", ["unknown-user", "malformed-email"])  # made up by Faker for every test
 def test_login_is_rejected_with_invalid_credentials(shop, page, accounts, step, account_name):
     """Invalid credentials show an error and do not open the account page."""
     # Test data

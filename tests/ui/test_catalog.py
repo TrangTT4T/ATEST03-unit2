@@ -2,16 +2,13 @@
 
 Requirements: @browse_catalog (REQ-06), @product_details (REQ-04).
 """
-import json
-from pathlib import Path
-
 import pytest
 from playwright.sync_api import expect
 
+from helper_utility.helpers import Helper
+
 pytestmark = [pytest.mark.high, pytest.mark.regression]
-PRODUCTS = json.loads((Path(__file__).resolve().parents[2] / "dataset" / "products.json").read_text(encoding="utf-8"))[
-    "products"
-]
+PRODUCTS = Helper.read_test_data("products")["products"]
 
 
 @pytest.mark.browse_catalog
@@ -45,9 +42,9 @@ def test_product_page_shows_the_catalog_name_and_price(shop, products, step):
     # Execution steps
     with step("Open the product page of Noir jacket"):
         shop.product.open_product_page(noir_jacket["path-name"])
-    with step("Verify the name is Noir jacket and the price £60.00"):
+    with step(f"Verify the name is Noir jacket and the price {noir_jacket['price']}"):
         expect(shop.product.product_name).to_have_text("Noir jacket")
-        expect(shop.product.product_price).to_contain_text("£60.00")
+        expect(shop.product.product_price).to_contain_text(noir_jacket["price"])
 
 
 @pytest.mark.product_details

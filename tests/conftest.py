@@ -6,23 +6,21 @@ fixtures instead of hooks, markers instead of Gherkin tags, network control, tra
 API testing, xdist.
 
 Fixture map (shared here; tests/ui/conftest.py and tests/api/conftest.py add their own):
-  products           test data from dataset/products.json
-  accounts           test accounts from .env (never committed; see .env.example)
+  products           test data from dataset/products.json (cart.json, search.json are read by the tests)
+  accounts           made-up accounts (Faker), new for every test
   step               numbered test steps: Allure step + trace group (helper_utility/steps.py)
 """
-import json
-import os
 import shutil
 from pathlib import Path
 
 import pytest
 from dotenv import load_dotenv
 
+from helper_utility.helpers import Helper
 from helper_utility.steps import Steps
 
 ROOT = Path(__file__).resolve().parent.parent
-DATASET = ROOT / "dataset"  # same file as the ATEST03-unit1 repo: dataset/products.json
-load_dotenv(ROOT / ".env")  # account data and the real login live in .env, which git ignores
+load_dotenv(ROOT / ".env")  # the real customer login (for -m auth) lives in .env, which git ignores
 ALLURE_RESULTS = ROOT / "reports" / "allure-results"
 
 
@@ -40,30 +38,23 @@ def pytest_configure(config):
 # --- data ---------------------------------------------------------------------
 @pytest.fixture(scope="session")
 def products() -> dict:
-    with open(DATASET / "products.json", encoding="utf-8") as fh:
-        return json.load(fh)["products"]
+    """Every product by name, from dataset/products.json (path-name, price, status, type, vendor, options)."""
+    return Helper.read_test_data("products")["products"]
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture
 def accounts() -> dict:
-    """Test accounts by name, read from .env (git ignores it; .env.example lists the variables).
+    """Made-up accounts for the login and registration tests, new for every test (Faker).
 
-    No email or password is written in a file that goes to GitHub. A test that needs a value
-    missing from .env is skipped and the message names the variables to set.
+    Nothing is written in a file: the names, emails and passwords are generated at run time. Only a
+    REAL customer login (for -m auth) comes from .env (SAUCE_EMAIL / SAUCE_PASSWORD).
     """
-    needed = ["TEST_PASSWORD", "WRONG_PASSWORD", "UNKNOWN_USER_EMAIL", "MALFORMED_EMAIL",
-              "NEW_CUSTOMER_FIRST_NAME", "NEW_CUSTOMER_LAST_NAME", "NEW_CUSTOMER_EMAIL"]
-    missing = [name for name in needed if not os.getenv(name)]
-    if missing:
-        pytest.skip(f"Set {', '.join(missing)} in .env (see .env.example) to run the account tests")
-    env = os.environ
+    customer = Helper.random_customer()
     return {
-        "new-customer": {"first_name": env["NEW_CUSTOMER_FIRST_NAME"], "last_name": env["NEW_CUSTOMER_LAST_NAME"],
-                         "email": env["NEW_CUSTOMER_EMAIL"], "password": env["TEST_PASSWORD"]},
-        "customer-without-email": {"first_name": env["NEW_CUSTOMER_FIRST_NAME"], "last_name": env["NEW_CUSTOMER_LAST_NAME"],
-                                   "email": "", "password": env["TEST_PASSWORD"]},
-        "unknown-user": {"email": env["UNKNOWN_USER_EMAIL"], "password": env["WRONG_PASSWORD"]},
-        "malformed-email": {"email": env["MALFORMED_EMAIL"], "password": env["WRONG_PASSWORD"]},
+        "new-customer": customer,
+        "customer-without-email": {**customer, "email": ""},
+        "unknown-user": Helper.random_unregistered_login(),
+        "malformed-email": {"email": Helper.random_malformed_email(), "password": customer["password"]},
     }
 
 

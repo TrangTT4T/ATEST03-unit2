@@ -18,12 +18,15 @@ Contents: Day 5 – Architecture · Day 6 – Tracing, network, auth, parallel �
 ATEST03-unit2/
 ├── pytest.ini                   # base_url, tracing, reports, markers (--strict-markers)
 ├── requirements.txt
-├── dataset/products.json        # same test data as Unit 1
-├── .env.example                 # account variables; copy to .env (git ignores .env, so it is never pushed)
+├── dataset/                     # test data, one JSON file per area (Helper.read_test_data("<area>"))
+│   ├── products.json            #   the 7 products: path-name, price, stock status, type, vendor, options
+│   ├── cart.json                #   add / change / remove cases with their expected totals
+│   └── search.json              #   matching keywords (upper case, part of a word ...) and keywords with no match
+├── .env.example                 # SAUCE_EMAIL / SAUCE_PASSWORD only (pytest -m auth); git ignores .env, so it is never pushed
 ├── api/                         # API objects, one class per area like pages/: BaseApi, ProductApi, CartApi, SearchApi
 ├── pages/                       # Playwright Page Objects (ported from Unit 1): one class per file
 └── tests/
-    ├── conftest.py              # shared: products, accounts (.env), step, reports
+    ├── conftest.py              # shared: products, accounts (Faker), step, reports
     ├── ui/                      # UI tests (browser + page objects); conftest: shop, network control, auth state
     │   ├── test_cart.py  test_checkout.py  test_catalog.py
     │   ├── test_login.py test_register.py  test_search.py   # one file per area, one marker per requirement
@@ -49,7 +52,7 @@ Unit 2 keeps WHAT Unit 1 tests (requirements, risks, data) and changes HOW: plai
 | --- | --- | --- |
 | `tests/features/*.feature` (14 scenarios) | One pytest test per scenario in `tests/ui/test_<area>.py`; Examples tables become `@pytest.mark.parametrize` | Rewritten as plain tests |
 | Requirement tags `@add_to_cart` … | Markers `@pytest.mark.add_to_cart` …, declared in `pytest.ini` | Inherited |
-| `dataset/products.json` | Same file | Inherited |
+| `dataset/products.json` | Same file, plus type, vendor and options; new `cart.json`, `search.json` | Inherited and extended |
 | Tags `@critical`, `@smoke`, `@negative` | Same names as pytest markers: `pytest -m smoke`; the area is the file: `pytest tests/ui/test_cart.py` | Inherited |
 | Page Objects (`pages/`) | Same class names, Playwright `Locator` instead of `WebElement` | Ported |
 | `tests/environment.py` hooks | `tests/conftest.py` fixtures | Replaced |
@@ -126,8 +129,8 @@ These layout rules are checked in review (Day 8, B4 checklist): a locator that `
 | --- | --- | --- | --- |
 | `browser`, `context`, `page` | session / test / test | `before_scenario` + `after_scenario` | Provided by pytest-playwright |
 | `browser_context_args` | session | `_make_driver()` options | Viewport 1366×900, locale en-GB |
-| `products` | session | `before_all` loading JSON | Reads `dataset/products.json` |
-| `accounts` | session | — | Test accounts by name (`unknown-user`, `new-customer` …) built from `.env`; git ignores `.env`, so no email or password ever goes to GitHub. A missing variable skips the account tests and names it |
+| `products` | session | `before_all` loading JSON | `Helper.read_test_data("products")` |
+| `accounts` | test | — | Test accounts by name (`unknown-user`, `new-customer`, `customer-without-email`, `malformed-email`), made up by Faker for every test: no email or password is written in any file |
 | `shop` | test | `Helper.create_page_object()` | All Page Objects bound to this test's page |
 | `add_product_and_open_cart` | test | `Given ... in the cart` step | Factory: `add_product_and_open_cart("Noir jacket", 2)` |
 | `block_third_party` | test, autouse | — | Network control (Day 6) |
@@ -144,6 +147,38 @@ def add_product_and_open_cart(shop, products):
         return shop.cart
     return _add
 ```
+
+
+### 4b. Test data (`dataset/`) and random data (Faker)
+
+Tests hold no values of their own: they read one JSON file per area through `Helper.read_test_data("<area>")`, and a parametrized test runs once per case. A new case is a new line in the file, not new code.
+
+| File | Holds | Used by |
+| --- | --- | --- |
+| `products.json` | 7 products: `path-name`, `price`, `status`, `type`, `vendor`, `options` (Size, Color …) | `products` fixture: catalog, product, cart and product API tests |
+| `cart.json` | `add` (product × quantity → total), `change` (from → to → total), `remove` | `test_cart.py`, `test_cart_api.py` (the same cases in the browser and through the API) |
+| `search.json` | `matching` (keyword → expected products: "jacket", "JACKET", "jack", "sandals", "heels"), `no_match` ("zzqqxx", "<script>") | `test_search.py`, `test_search_api.py` |
+
+```python
+CART = Helper.read_test_data("cart")
+
+@pytest.mark.parametrize("case", CART["add"], ids=[case["id"] for case in CART["add"]])
+def test_cart_total_equals_price_times_quantity(add_product_and_open_cart, step, case):
+    ...
+```
+
+Account data is never written in a file: the `accounts` fixture makes up new accounts for every test with Faker (`Helper.random_customer()`: name, a unique `…@example.com` email, a strong password; `random_unregistered_login()`, `random_malformed_email()`). Only the real login of `pytest -m auth` comes from `.env`.
+
+`Helper` (`helper_utility/helpers.py`) is what pages, API objects and tests share:
+
+| Area | Methods |
+| --- | --- |
+| Element finder | `by_locator()`: locator string → Playwright selector; an unknown prefix raises `ValueError` |
+| Test data | `read_test_data(area)`: a missing file raises `FileNotFoundError` listing the areas that exist |
+| Prices | `money_to_float("£1,120.00")` → 1120.0; `money_to_pence("£1,120.00")` → 112000 (the API's unit) |
+| Random data | `random_customer()`, `random_unregistered_login()`, `random_malformed_email()` |
+
+`BasePage` reports failures clearly: every wait and action runs inside `_report_timeout()`, so a Playwright timeout logs an ERROR line and says what the test was doing and on which page ("Clicking '//*[@id='checkout']' timed out on https://…/cart"), followed by Playwright's call log. `open_page()` stops with a clear message when the store shows its bot check ("Verifying your connection") instead of the page; it never tries to get past it.
 
 ### 5. Assertions
 
@@ -212,7 +247,7 @@ Both rules are part of the review checklist (Day 8, B4).
 cd ATEST03-unit2
 pip install -r requirements.txt
 playwright install chromium
-pytest --collect-only -q          # 29 UI tests (23 in the default run) + 13 API tests
+pytest --collect-only -q          # 37 UI tests (31 in the default run) + 30 API tests
 pytest -m smoke                   # same smoke markers as Unit 1's tags
 pytest --headed --slowmo 300      # watch it run
 ```
@@ -319,10 +354,10 @@ The store's pages call a JSON API (the Shopify AJAX API). Testing it directly is
 
 | Test | Checks | Requirement |
 | --- | --- | --- |
-| `test_product_api.py`: `test_product_api_returns_the_catalog_name_price_and_stock` (×7), `test_unknown_product_returns_404` | title, price in pence, `available` = `dataset/products.json`; 404 for an unknown product | REQ-04 |
-| `test_cart_api.py`: `test_cart_api_adds_the_product_and_totals_the_price`, `test_cart_api_removes_a_line_set_to_zero` | 2 × Noir jacket → 2 items, 12000 pence; line → 0 → empty cart | REQ-01, REQ-02 |
+| `test_product_api.py`: `…_returns_the_catalog_name_price_and_stock` (×7), `…_returns_the_catalog_type_vendor_and_options` (×7), `test_unknown_product_returns_404` | title, price in pence, `available`, type, vendor, options = `dataset/products.json`; 404 for an unknown product | REQ-04 |
+| `test_cart_api.py`: `…_adds_the_product_and_totals_the_price` (×4), `…_changes_the_quantity_of_a_line` (×2), `…_removes_a_line_set_to_zero` | the cases of `dataset/cart.json`: item count and total in pence | REQ-01, REQ-02 |
 | `test_cart_api.py`: `test_cart_api_refuses_a_sold_out_product` | **xfail, finding A1** | REQ-04 |
-| `test_search_api.py`: `…_suggests_matching_products`, `…_suggests_nothing_for_an_unknown_keyword` | suggestions for "jacket" / none for "zzqqxx" | REQ-08 |
+| `test_search_api.py`: `…_suggests_matching_products`, `…_suggests_nothing_for_an_unknown_keyword` | the cases of `dataset/search.json`: expected suggestions / none | REQ-08 |
 | `tests/ui/test_cart.py`: `test_cart_prepared_through_the_api_shows_in_the_browser` | API for the set-up, browser for the check | REQ-01 |
 
 **Finding A1:** Brown Shades is sold out (`"available": false`, the product page shows a disabled "Sold Out" button), but `POST /cart/add.js` still adds it (HTTP 200, the cart holds 1 item). The UI test passes; only the API test sees it. The test states the expected behaviour (the add is refused) and is marked `xfail(strict=True)` with the finding: the report lists it as a known defect, and when the store is fixed the test passes and `strict` makes the run fail, so the marker is removed.
@@ -440,8 +475,8 @@ pytest -m "critical and not negative"
 
 | Check | Result |
 | --- | --- |
-| `pytest` | 35 passed (23 UI + 12 API), 1 xfailed (API, finding A1), 6 deselected (`auth` ×2, `manual` ×3, `data_creating` ×1) |
-| `pytest -n auto` | 35 passed, 1 xfailed |
+| `pytest` | 60 passed (31 UI + 29 API), 1 xfailed (API, finding A1), 6 deselected (`auth` ×2, `manual` ×3, `data_creating` ×1) |
+| `pytest -n auto` | 60 passed, 1 xfailed |
 | `pytest -m auth` (with an account) | 2 passed |
 | Failed test | `test-results/<test>/trace.zip`, screenshot, video |
 

@@ -3,17 +3,12 @@
 The same requirement as the UI catalog tests, one layer lower and without rendering.
 Requirement: @product_details (REQ-04).
 """
-import json
-from pathlib import Path
-
 import pytest
 
-from pages import BasePage
+from helper_utility.helpers import Helper
 
 pytestmark = [pytest.mark.api, pytest.mark.regression]
-PRODUCTS = json.loads((Path(__file__).resolve().parents[2] / "dataset" / "products.json").read_text(encoding="utf-8"))[
-    "products"
-]
+PRODUCTS = Helper.read_test_data("products")["products"]
 
 
 @pytest.mark.high
@@ -23,7 +18,7 @@ def test_product_api_returns_the_catalog_name_price_and_stock(shop_api, products
     """The product JSON has the same name, price and stock status as dataset/products.json."""
     # Test data
     product = products[name]
-    price_in_pence = round(BasePage.money_to_float(product["price"]) * 100)  # the API counts pence
+    price_in_pence = Helper.money_to_pence(product["price"])  # the API counts pence
     in_stock = product["status"] == "available"
 
     # Execution steps
@@ -35,6 +30,28 @@ def test_product_api_returns_the_catalog_name_price_and_stock(shop_api, products
         assert data["title"] == name
         assert data["price"] == price_in_pence
         assert data["available"] is in_stock
+
+
+@pytest.mark.medium
+@pytest.mark.product_details
+@pytest.mark.parametrize("name", sorted(PRODUCTS))
+def test_product_api_returns_the_catalog_type_vendor_and_options(shop_api, products, step, name):
+    """The product JSON has the type, vendor and options (Size, Color ...) of dataset/products.json."""
+    # Test data
+    product = products[name]
+
+    # Execution steps
+    with step(f"GET the product JSON of {name}"):
+        response = shop_api.product.request_product(product["path-name"])
+        assert response.status == 200, f"HTTP {response.status} for {product['path-name']}"
+        data = response.json()
+    with step(f"Verify type {product['type']!r} and vendor {product['vendor']!r}"):
+        assert data["type"] == product["type"]
+        assert data["vendor"] == product["vendor"]
+    with step(f"Verify the options {product['options']}"):
+        options = {option["name"]: option["values"] for option in data["options"]}
+        options.pop("Title", None)  # Shopify's placeholder {"Title": ["Default Title"]} for a product without options
+        assert options == product["options"]
 
 
 @pytest.mark.medium
