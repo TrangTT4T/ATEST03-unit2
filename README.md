@@ -18,8 +18,8 @@ Unit 2 is **plain Playwright**: tests are pytest functions that drive page objec
 
 | Day | Topic | Section in the unit document | Code used |
 | --- | --- | --- | --- |
-| 5 | Architecture, contexts, locators, fixtures, assertions, isolation | Day 5 section | `pages/`, `tests/conftest.py`, `tests/test_cart.py` … |
-| 6 | Tracing, network interception, auth state, parallel, reporting | Day 6 section | `pytest.ini`, `tests/test_network.py`, `tests/test_auth_state.py` |
+| 5 | Architecture, contexts, locators, fixtures, assertions, isolation | Day 5 section | `pages/`, `tests/conftest.py`, `tests/ui/test_cart.py` … |
+| 6 | Tracing, network interception, auth state, parallel, reporting | Day 6 section | `pytest.ini`, `tests/ui/test_network.py`, `tests/ui/test_auth_state.py` |
 | 7 | Lab: prioritised end-to-end workflows | Day 7 section | full suite |
 | 8 | Revision + reliability, flaky control, stability | Day 8 section | repeated runs, `pytest-rerunfailures`, trace viewer |
 
@@ -30,20 +30,27 @@ ATEST03-unit2/
 ├── dataset/
 │   └── products.json            # Unit 1 test data
 ├── .env.example                 # account variables to copy into .env (git ignores .env: never pushed)
-├── api/                         # API objects: StoreApi (Shopify AJAX API), endpoints at the bottom
+├── api/                         # API objects, one class per area like pages/: BaseApi (logged GET/POST),
+│                                #   ProductApi, CartApi, SearchApi (Shopify AJAX API); endpoints at the bottom
 ├── pages/                       # Page Objects: one class per file, locator strings at the bottom;
 │                                #   BasePage = find_element(s), click/type/wait methods, money_to_float()
 ├── tests/
-│   ├── conftest.py              # fixtures, network control, auth state
-│   ├── test_cart.py             # @add_to_cart, @update_cart        (Critical)
-│   ├── test_checkout.py         # @start_checkout                   (Critical)
-│   ├── test_catalog.py          # @browse_catalog, @product_details (High)
-│   ├── test_login.py            # @secure_login                     (High)
-│   ├── test_register.py         # @create_account                   (Medium)
-│   ├── test_search.py           # @search_products                  (Medium)
-│   ├── test_network.py          # interception, fault injection, throttling
-│   ├── test_api.py              # the store's JSON API: products, cart, search (finding A1)
-│   └── test_auth_state.py       # saved login (needs a real account)
+│   ├── conftest.py              # shared: products, accounts (.env), step, reports
+│   ├── ui/                      # UI tests: browser + page objects
+│   │   ├── conftest.py          # shop, add_product_and_open_cart, block_third_party, shop_api_in_browser, saved login
+│   │   ├── test_cart.py         # @add_to_cart, @update_cart        (Critical)
+│   │   ├── test_checkout.py     # @start_checkout                   (Critical)
+│   │   ├── test_catalog.py      # @browse_catalog, @product_details (High)
+│   │   ├── test_login.py        # @secure_login                     (High)
+│   │   ├── test_register.py     # @create_account                   (Medium)
+│   │   ├── test_search.py       # @search_products                  (Medium)
+│   │   ├── test_network.py      # interception, fault injection, throttling
+│   │   └── test_auth_state.py   # saved login (needs a real account)
+│   └── api/                     # API tests: no browser
+│       ├── conftest.py          # shop_api: shop_api.product / .cart / .search
+│       ├── test_product_api.py  # @product_details
+│       ├── test_cart_api.py     # @add_to_cart, @update_cart (+ finding A1)
+│       └── test_search_api.py   # @search_products
 ├── helper_utility/helpers.py    # class Helper: by_locator() = locator string -> Playwright selector
 ├── helper_utility/steps.py      # the `step` fixture: numbered steps -> Allure step + trace group
 └── docs/Unit2_Playwright_vi.md, Unit2_Playwright_en.md
@@ -57,14 +64,15 @@ Requires **Python 3.12**: the version in `.python-version` (PyCharm, VS Code, py
 pip install -r requirements.txt
 cp .env.example .env                 # then fill in the account values (only for -m auth / manual / data_creating)
 playwright install chromium
-pytest                               # 22 browser + 14 API tests; manual/data_creating/auth excluded
-pytest -m api                        # the API tests only (about 10 s)
+pytest                               # 23 UI + 13 API tests; manual/data_creating/auth excluded
+pytest tests/api                     # the API tests only (no browser, about 5 s)
+pytest tests/ui                      # the UI tests only
 pytest -m smoke
 pytest -m critical                   # every Critical-risk test
 pytest -m add_to_cart                # every test of one requirement
 pytest -n auto                       # parallel
 pytest -m auth                       # needs SAUCE_EMAIL / SAUCE_PASSWORD
-pytest tests/test_cart.py --headed --slowmo 300
+pytest tests/ui/test_cart.py --headed --slowmo 300
 playwright show-trace test-results/<test>/trace.zip
 ```
 

@@ -76,3 +76,22 @@ def test_remove_the_only_product_from_the_cart(add_product_and_open_cart, step):
         cart.remove_product_from_cart("Striped top")
     with step("Verify the cart has no lines left"):
         expect(cart.quantity_boxes).to_have_count(0)
+
+
+@pytest.mark.critical
+@pytest.mark.add_to_cart
+def test_cart_prepared_through_the_api_shows_in_the_browser(shop, shop_api_in_browser, products, step):
+    """API for the set-up, browser for the check: a cart filled through the API shows on the cart page."""
+    # Test data
+    grey_jacket = products["Grey jacket"]
+
+    # Execution steps
+    with step("Open the store (the API calls share this browser's cookies)"):
+        shop.home.open_page()
+    with step("POST /cart/add.js: 1 x Grey jacket, without touching the product page"):
+        response = shop_api_in_browser.cart.add_product_to_cart(grey_jacket["path-name"], 1)
+        assert response.status == 200, response.text()
+    with step("Open the cart page and verify it shows 1 item"):
+        shop.cart.open_page()
+        expect(shop.cart.quantity_boxes).to_have_count(1)
+        assert shop.cart.count_items_in_cart() == 1

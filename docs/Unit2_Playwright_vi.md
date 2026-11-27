@@ -20,15 +20,17 @@ ATEST03-unit2/
 ├── requirements.txt
 ├── dataset/products.json        # cùng dữ liệu test với Unit 1
 ├── .env.example                 # danh sách biến tài khoản; chép thành .env (git bỏ qua .env nên không bao giờ bị push)
-├── api/                         # API object: StoreApi (Shopify AJAX API), endpoint khai ở cuối class
+├── api/                         # API object, mỗi khu vực một class như pages/: BaseApi, ProductApi, CartApi, SearchApi
 ├── pages/                       # Page Object Playwright (chuyển từ Unit 1): mỗi file một class
 └── tests/
-    ├── conftest.py              # fixture: dữ liệu, cô lập, kiểm soát network, đăng nhập
-    ├── test_cart.py  test_checkout.py  test_catalog.py
-    ├── test_login.py test_register.py  test_search.py   # mỗi khu vực một file, mỗi yêu cầu một marker
-    ├── test_network.py          # chặn request, kiểm tra request, giả lập lỗi, mạng chậm
-    ├── test_api.py              # API JSON của store (api/store_api.py)
-    └── test_auth_state.py       # phiên đăng nhập đã lưu + kiểm tra cô lập
+    ├── conftest.py              # dùng chung: products, accounts (.env), step, báo cáo
+    ├── ui/                      # test giao diện (trình duyệt + page object); conftest: shop, kiểm soát network, đăng nhập
+    │   ├── test_cart.py  test_checkout.py  test_catalog.py
+    │   ├── test_login.py test_register.py  test_search.py   # mỗi khu vực một file, mỗi yêu cầu một marker
+    │   ├── test_network.py      # chặn request, kiểm tra request, giả lập lỗi, mạng chậm
+    │   └── test_auth_state.py   # phiên đăng nhập đã lưu + kiểm tra cô lập
+    └── api/                     # test API (không trình duyệt); conftest: shop_api
+        └── test_product_api.py  test_cart_api.py  test_search_api.py
 helper_utility/helpers.py        # class Helper: by_locator() = locator string -> Playwright selector
 helper_utility/steps.py          # fixture `step`: bước đánh số -> bước Allure + nhóm trong trace
 ```
@@ -45,10 +47,10 @@ Unit 2 giữ CÁI GÌ Unit 1 kiểm thử (yêu cầu, rủi ro, dữ liệu) v�
 
 | Unit 1 (behave + Selenium) | Unit 2 (pytest + Playwright) | Trạng thái |
 | --- | --- | --- |
-| `tests/features/*.feature` (14 scenario) | Mỗi scenario thành một test pytest trong `tests/test_<khu_vực>.py`; bảng Examples thành `@pytest.mark.parametrize` | Viết lại thành test thường |
+| `tests/features/*.feature` (14 scenario) | Mỗi scenario thành một test pytest trong `tests/ui/test_<khu_vực>.py`; bảng Examples thành `@pytest.mark.parametrize` | Viết lại thành test thường |
 | Tag yêu cầu `@add_to_cart` … | Marker `@pytest.mark.add_to_cart` …, khai báo trong `pytest.ini` | Kế thừa |
 | `dataset/products.json` | Cùng file | Kế thừa |
-| Tag `@critical`, `@smoke`, `@negative` | Cùng tên, thành marker pytest: `pytest -m smoke`; khu vực là file: `pytest tests/test_cart.py` | Kế thừa |
+| Tag `@critical`, `@smoke`, `@negative` | Cùng tên, thành marker pytest: `pytest -m smoke`; khu vực là file: `pytest tests/ui/test_cart.py` | Kế thừa |
 | Page Object (`pages/`) | Cùng tên class, dùng `Locator` của Playwright thay `WebElement` | Chuyển đổi |
 | Hook trong `tests/environment.py` | Fixture trong `tests/conftest.py` | Thay thế |
 | Explicit wait `WebDriverWait` | Action tự chờ + `expect()` tự thử lại | Thay thế |
@@ -202,7 +204,7 @@ Hai quy tắc này nằm trong checklist review (Day 8, B4).
 
 ### 6. Kiểm tra tính cô lập
 
-`tests/test_auth_state.py::test_auth_state_does_not_leak_into_other_tests` chứng minh test dùng `page` mặc định không bị đăng nhập, dù test khác trong cùng session dùng trạng thái đăng nhập đã lưu.
+`tests/ui/test_auth_state.py::test_auth_state_does_not_leak_into_other_tests` chứng minh test dùng `page` mặc định không bị đăng nhập, dù test khác trong cùng session dùng trạng thái đăng nhập đã lưu.
 
 ### 7. Chạy
 
@@ -210,7 +212,7 @@ Hai quy tắc này nằm trong checklist review (Day 8, B4).
 cd ATEST03-unit2
 pip install -r requirements.txt
 playwright install chromium
-pytest --collect-only -q          # 28 test trình duyệt (22 chạy mặc định) + 14 test API
+pytest --collect-only -q          # 29 test giao diện (23 chạy mặc định) + 13 test API
 pytest -m smoke                   # cùng tag smoke như Unit 1
 pytest --headed --slowmo 300      # xem trình duyệt chạy
 ```
@@ -278,7 +280,7 @@ def block_third_party(request, context: BrowserContext, base_url: str):
 
 Cho phép: host của store và `*.shopify.com`, `*.myshopify.com`, `*.shopifycdn.com`. Mọi host khác (Facebook, Twitter, Pinterest, ứng dụng Sauce) bị hủy. Rủi ro R09 (widget bên thứ ba), vốn kiểm thủ công ở Unit 1, giờ test được.
 
-#### 2.2 Bốn test network (`tests/test_network.py`)
+#### 2.2 Bốn test network (`tests/ui/test_network.py`)
 
 | Test | Kỹ thuật | Risk |
 | --- | --- | --- |
@@ -298,37 +300,35 @@ shop.cart.open_page()
 expect(shop.cart.quantity_boxes).to_have_count(0)
 ```
 
-### 2b. Test API (`tests/test_api.py`)
+### 2b. Test API (`tests/api/`)
 
-Các trang của store gọi một API JSON (Shopify AJAX API). Test thẳng API thì nhanh (14 test, khoảng 10 giây), không cần vẽ giao diện, và cho thấy chính server cho phép những gì. `api/store_api.py` chứa các lời gọi, bố cục giống page object: method gom dưới banner `####`, endpoint khai ở cuối class.
+Các trang của store gọi một API JSON (Shopify AJAX API). Test thẳng API thì nhanh (13 test, khoảng 5 giây), không cần trình duyệt, và cho thấy chính server cho phép những gì. Các API object nằm trong `api/`, ngang hàng `pages/` và chia giống vậy, mỗi khu vực một class:
 
-| Method của `StoreApi` | Endpoint |
-| --- | --- |
-| `request_product(path_name)` | `GET /products/<path-name>.js` |
-| `add_product_to_cart(path_name, quantity)` | `POST /cart/add.js` |
-| `get_cart()` | `GET /cart.js` |
-| `change_cart_line_quantity(line, quantity)` | `POST /cart/change.js` |
-| `search_product_titles(keyword)` | `GET /search/suggest.json` |
-
-| Fixture | Request context | Dùng cho |
+| API object (`api/`) | Method | Endpoint |
 | --- | --- | --- |
-| `store_api` | riêng (`playwright.request.new_context`): không trình duyệt, giỏ riêng | test API thuần |
-| `store_api_in_browser` | của page (`page.context.request`): dùng chung cookie với trình duyệt | API để chuẩn bị, trình duyệt để kiểm tra |
+| `BaseApi` | `get(endpoint, params)`, `post(endpoint, data)` — có ghi log kèm status | — |
+| `ProductApi` | `request_product(path_name)` | `GET /products/<path-name>.js` |
+| `CartApi` | `add_product_to_cart(path_name, quantity)`, `get_cart()`, `change_cart_line_quantity(line, quantity)` | `POST /cart/add.js`, `GET /cart.js`, `POST /cart/change.js` |
+| `SearchApi` | `search_product_titles(keyword)` | `GET /search/suggest.json` |
+
+| Fixture | Ở đâu | Request context | Dùng cho |
+| --- | --- | --- | --- |
+| `shop_api` | `tests/api/conftest.py` | riêng (`playwright.request.new_context`): không trình duyệt, giỏ riêng | test API: `shop_api.product`, `shop_api.cart`, `shop_api.search` (giống `shop` cho page) |
+| `shop_api_in_browser` | `tests/ui/conftest.py` | của page (`page.context.request`): dùng chung cookie với trình duyệt | test giao diện dùng API để chuẩn bị dữ liệu |
 
 | Test | Kiểm tra | Yêu cầu |
 | --- | --- | --- |
-| `test_product_api_returns_the_catalog_name_price_and_stock` (×7) | tên, giá (pence), `available` khớp `dataset/products.json` | REQ-04 |
-| `test_unknown_product_returns_404` | 404 cho sản phẩm không tồn tại | REQ-04 |
-| `test_cart_api_adds_the_product_and_totals_the_price` | 2 × Noir jacket → 2 món, 12000 pence | REQ-01 |
-| `test_cart_api_removes_a_line_set_to_zero` | dòng → số lượng 0 → giỏ trống | REQ-02 |
-| `test_cart_api_refuses_a_sold_out_product` | **xfail, phát hiện A1** | REQ-04 |
-| `test_search_api_suggests_matching_products` / `…_nothing_for_an_unknown_keyword` | gợi ý cho "jacket" / không có gì cho "zzqqxx" | REQ-08 |
-| `test_cart_prepared_through_the_api_shows_in_the_browser` | giỏ thêm bằng API hiện trên trang giỏ | REQ-01 |
+| `test_product_api.py`: `test_product_api_returns_the_catalog_name_price_and_stock` (×7), `test_unknown_product_returns_404` | tên, giá (pence), `available` khớp `dataset/products.json`; 404 cho sản phẩm không tồn tại | REQ-04 |
+| `test_cart_api.py`: `test_cart_api_adds_the_product_and_totals_the_price`, `test_cart_api_removes_a_line_set_to_zero` | 2 × Noir jacket → 2 món, 12000 pence; dòng → 0 → giỏ trống | REQ-01, REQ-02 |
+| `test_cart_api.py`: `test_cart_api_refuses_a_sold_out_product` | **xfail, phát hiện A1** | REQ-04 |
+| `test_search_api.py`: `…_suggests_matching_products`, `…_suggests_nothing_for_an_unknown_keyword` | gợi ý cho "jacket" / không có gì cho "zzqqxx" | REQ-08 |
+| `tests/ui/test_cart.py`: `test_cart_prepared_through_the_api_shows_in_the_browser` | API để chuẩn bị, trình duyệt để kiểm tra | REQ-01 |
 
 **Phát hiện A1:** Brown Shades đang hết hàng (`"available": false`, trang sản phẩm hiện nút "Sold Out" bị khoá), nhưng `POST /cart/add.js` vẫn thêm được (HTTP 200, giỏ có 1 món). Test giao diện pass; chỉ test API thấy lỗi này. Test ghi hành vi đúng (phải bị từ chối) và được đánh dấu `xfail(strict=True)` kèm mô tả: báo cáo liệt kê nó là lỗi đã biết, và khi store sửa xong thì test pass, `strict` làm lần chạy fail để nhắc bỏ marker.
 
 ```bash
-pytest -m api          # chỉ chạy test API (không mở trình duyệt, trừ test cuối)
+pytest tests/api       # chỉ chạy test API (không trình duyệt)
+pytest tests/ui        # chỉ chạy test giao diện
 ```
 
 ### 3. Lưu trạng thái đăng nhập
@@ -353,7 +353,7 @@ def saved_login_state(browser: Browser, base_url: str) -> Path:
     return AUTH_FILE
 ```
 
-Được dùng trong `tests/test_auth_state.py` (rủi ro R04). File `.auth/customer.json` chứa phiên đăng nhập: không được đưa lên git.
+Được dùng trong `tests/ui/test_auth_state.py` (rủi ro R04). File `.auth/customer.json` chứa phiên đăng nhập: không được đưa lên git.
 
 ```bash
 # Linux/macOS
@@ -414,10 +414,10 @@ Bài lab tự động hóa các ưu tiên rủi ro của Unit 1 trên Playwright
 
 | File | Vai trò |
 | --- | --- |
-| `tests/test_<khu_vực>.py` | Mỗi khu vực một file; test nào cũng có marker rủi ro, bộ chạy và yêu cầu |
+| `tests/ui/test_<khu_vực>.py` | Mỗi khu vực một file; test nào cũng có marker rủi ro, bộ chạy và yêu cầu |
 | `tests/conftest.py` | Fixture, kiểm soát network, trạng thái đăng nhập |
-| `tests/test_network.py` | Chặn request, kiểm tra request, giả lập lỗi, mạng chậm |
-| `tests/test_auth_state.py` | Phiên đăng nhập đã lưu và kiểm tra cô lập |
+| `tests/ui/test_network.py` | Chặn request, kiểm tra request, giả lập lỗi, mạng chậm |
+| `tests/ui/test_auth_state.py` | Phiên đăng nhập đã lưu và kiểm tra cô lập |
 | `pages/` | Page Object chuyển từ Unit 1 |
 | `pytest.ini` | base URL, tracing, báo cáo, bộ lọc marker mặc định, danh sách marker (`--strict-markers`) |
 
@@ -439,7 +439,7 @@ pytest -m "critical and not negative"
 
 | Kiểm tra | Kết quả |
 | --- | --- |
-| `pytest` | 35 pass (22 trình duyệt + 13 API), 1 xfailed (phát hiện A1), 6 bị lọc (`auth` ×2, `manual` ×3, `data_creating` ×1) |
+| `pytest` | 35 pass (23 giao diện + 12 API), 1 xfailed (API, phát hiện A1), 6 bị lọc (`auth` ×2, `manual` ×3, `data_creating` ×1) |
 | `pytest -n auto` | 35 pass, 1 xfailed |
 | `pytest -m auth` (có tài khoản) | 2 pass |
 | Test fail | `test-results/<test>/trace.zip`, ảnh, video |
@@ -474,7 +474,7 @@ Day 8 khép lại cả hai Unit: phần A ôn tập Unit 2 so với Unit 1; ph�
 | Network | Không kiểm soát | Chặn, kiểm tra, giả lập lỗi, giả lập chậm |
 | Đăng nhập | Đăng nhập qua UI mỗi lần | Dùng lại storage state đã lưu |
 | Tốc độ | Tuần tự | Song song `-n auto` |
-| Lọc | `behave --tags=@cart` | `pytest tests/test_cart.py`, `pytest -m add_to_cart` |
+| Lọc | `behave --tags=@cart` | `pytest tests/ui/test_cart.py`, `pytest -m add_to_cart` |
 
 Câu hỏi ôn tập:
 

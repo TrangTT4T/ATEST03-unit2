@@ -9,7 +9,7 @@ import pytest
 from playwright.sync_api import expect
 
 pytestmark = [pytest.mark.high, pytest.mark.regression]
-PRODUCTS = json.loads((Path(__file__).resolve().parents[1] / "dataset" / "products.json").read_text(encoding="utf-8"))[
+PRODUCTS = json.loads((Path(__file__).resolve().parents[2] / "dataset" / "products.json").read_text(encoding="utf-8"))[
     "products"
 ]
 

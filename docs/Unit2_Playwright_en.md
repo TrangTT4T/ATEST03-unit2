@@ -20,15 +20,17 @@ ATEST03-unit2/
 ├── requirements.txt
 ├── dataset/products.json        # same test data as Unit 1
 ├── .env.example                 # account variables; copy to .env (git ignores .env, so it is never pushed)
-├── api/                         # API objects: StoreApi (Shopify AJAX API), endpoints at the bottom
+├── api/                         # API objects, one class per area like pages/: BaseApi, ProductApi, CartApi, SearchApi
 ├── pages/                       # Playwright Page Objects (ported from Unit 1): one class per file
 └── tests/
-    ├── conftest.py              # fixtures: data, isolation, network control, auth state
-    ├── test_cart.py  test_checkout.py  test_catalog.py
-    ├── test_login.py test_register.py  test_search.py   # one file per area, one marker per requirement
-    ├── test_network.py          # interception, request assertion, fault injection, throttling
-    ├── test_api.py              # the store's JSON API (api/store_api.py)
-    └── test_auth_state.py       # saved login + isolation check
+    ├── conftest.py              # shared: products, accounts (.env), step, reports
+    ├── ui/                      # UI tests (browser + page objects); conftest: shop, network control, auth state
+    │   ├── test_cart.py  test_checkout.py  test_catalog.py
+    │   ├── test_login.py test_register.py  test_search.py   # one file per area, one marker per requirement
+    │   ├── test_network.py      # interception, request assertion, fault injection, throttling
+    │   └── test_auth_state.py   # saved login + isolation check
+    └── api/                     # API tests (no browser); conftest: shop_api
+        └── test_product_api.py  test_cart_api.py  test_search_api.py
 helper_utility/helpers.py        # class Helper: by_locator() = locator string -> Playwright selector
 helper_utility/steps.py          # the `step` fixture: numbered steps -> Allure step + trace group
 ```
@@ -45,10 +47,10 @@ Unit 2 keeps WHAT Unit 1 tests (requirements, risks, data) and changes HOW: plai
 
 | Unit 1 (behave + Selenium) | Unit 2 (pytest + Playwright) | Status |
 | --- | --- | --- |
-| `tests/features/*.feature` (14 scenarios) | One pytest test per scenario in `tests/test_<area>.py`; Examples tables become `@pytest.mark.parametrize` | Rewritten as plain tests |
+| `tests/features/*.feature` (14 scenarios) | One pytest test per scenario in `tests/ui/test_<area>.py`; Examples tables become `@pytest.mark.parametrize` | Rewritten as plain tests |
 | Requirement tags `@add_to_cart` … | Markers `@pytest.mark.add_to_cart` …, declared in `pytest.ini` | Inherited |
 | `dataset/products.json` | Same file | Inherited |
-| Tags `@critical`, `@smoke`, `@negative` | Same names as pytest markers: `pytest -m smoke`; the area is the file: `pytest tests/test_cart.py` | Inherited |
+| Tags `@critical`, `@smoke`, `@negative` | Same names as pytest markers: `pytest -m smoke`; the area is the file: `pytest tests/ui/test_cart.py` | Inherited |
 | Page Objects (`pages/`) | Same class names, Playwright `Locator` instead of `WebElement` | Ported |
 | `tests/environment.py` hooks | `tests/conftest.py` fixtures | Replaced |
 | `WebDriverWait` explicit waits | Auto-waiting actions + retrying `expect()` | Replaced |
@@ -202,7 +204,7 @@ Both rules are part of the review checklist (Day 8, B4).
 
 ### 6. Isolation check
 
-`tests/test_auth_state.py::test_auth_state_does_not_leak_into_other_tests` proves that a test using the default `page` is not logged in even when another test in the same session uses a saved login.
+`tests/ui/test_auth_state.py::test_auth_state_does_not_leak_into_other_tests` proves that a test using the default `page` is not logged in even when another test in the same session uses a saved login.
 
 ### 7. Run
 
@@ -210,7 +212,7 @@ Both rules are part of the review checklist (Day 8, B4).
 cd ATEST03-unit2
 pip install -r requirements.txt
 playwright install chromium
-pytest --collect-only -q          # 28 browser tests (22 in the default run) + 14 API tests
+pytest --collect-only -q          # 29 UI tests (23 in the default run) + 13 API tests
 pytest -m smoke                   # same smoke markers as Unit 1's tags
 pytest --headed --slowmo 300      # watch it run
 ```
@@ -278,7 +280,7 @@ def block_third_party(request, context: BrowserContext, base_url: str):
 
 Allowed: the store host and `*.shopify.com`, `*.myshopify.com`, `*.shopifycdn.com`. Everything else (Facebook, Twitter, Pinterest, the Sauce app) is aborted. Risk R09 (third-party widgets), manual in Unit 1, becomes testable.
 
-#### 2.2 The four network tests (`tests/test_network.py`)
+#### 2.2 The four network tests (`tests/ui/test_network.py`)
 
 | Test | Technique | Risk |
 | --- | --- | --- |
@@ -298,37 +300,35 @@ shop.cart.open_page()
 expect(shop.cart.quantity_boxes).to_have_count(0)
 ```
 
-### 2b. API testing (`tests/test_api.py`)
+### 2b. API testing (`tests/api/`)
 
-The store's pages call a JSON API (the Shopify AJAX API). Testing it directly is fast (14 tests in about 10 s), needs no rendering and shows what the server itself allows. `api/store_api.py` holds the calls, laid out like a page object: methods under `####` banners, endpoints at the bottom of the class.
+The store's pages call a JSON API (the Shopify AJAX API). Testing it directly is fast (13 tests in about 5 s), needs no browser and shows what the server itself allows. The API objects sit in `api/`, next to `pages/` and split the same way, one class per area:
 
-| `StoreApi` method | Endpoint |
-| --- | --- |
-| `request_product(path_name)` | `GET /products/<path-name>.js` |
-| `add_product_to_cart(path_name, quantity)` | `POST /cart/add.js` |
-| `get_cart()` | `GET /cart.js` |
-| `change_cart_line_quantity(line, quantity)` | `POST /cart/change.js` |
-| `search_product_titles(keyword)` | `GET /search/suggest.json` |
-
-| Fixture | Request context | Used for |
+| API object (`api/`) | Method | Endpoint |
 | --- | --- | --- |
-| `store_api` | its own (`playwright.request.new_context`): no browser, its own cart | pure API tests |
-| `store_api_in_browser` | the page's (`page.context.request`): shares the browser's cookies | API for the set-up, browser for the check |
+| `BaseApi` | `get(endpoint, params)`, `post(endpoint, data)` — logged with the status | — |
+| `ProductApi` | `request_product(path_name)` | `GET /products/<path-name>.js` |
+| `CartApi` | `add_product_to_cart(path_name, quantity)`, `get_cart()`, `change_cart_line_quantity(line, quantity)` | `POST /cart/add.js`, `GET /cart.js`, `POST /cart/change.js` |
+| `SearchApi` | `search_product_titles(keyword)` | `GET /search/suggest.json` |
+
+| Fixture | Where | Request context | Used for |
+| --- | --- | --- | --- |
+| `shop_api` | `tests/api/conftest.py` | its own (`playwright.request.new_context`): no browser, its own cart | API tests: `shop_api.product`, `shop_api.cart`, `shop_api.search` (like `shop` for pages) |
+| `shop_api_in_browser` | `tests/ui/conftest.py` | the page's (`page.context.request`): shares the browser's cookies | UI tests that use the API for the set-up |
 
 | Test | Checks | Requirement |
 | --- | --- | --- |
-| `test_product_api_returns_the_catalog_name_price_and_stock` (×7) | title, price in pence, `available` = `dataset/products.json` | REQ-04 |
-| `test_unknown_product_returns_404` | 404 for a product that does not exist | REQ-04 |
-| `test_cart_api_adds_the_product_and_totals_the_price` | 2 × Noir jacket → 2 items, 12000 pence | REQ-01 |
-| `test_cart_api_removes_a_line_set_to_zero` | line → quantity 0 → empty cart | REQ-02 |
-| `test_cart_api_refuses_a_sold_out_product` | **xfail, finding A1** | REQ-04 |
-| `test_search_api_suggests_matching_products` / `…_nothing_for_an_unknown_keyword` | suggestions for "jacket" / none for "zzqqxx" | REQ-08 |
-| `test_cart_prepared_through_the_api_shows_in_the_browser` | cart filled by the API shows on the cart page | REQ-01 |
+| `test_product_api.py`: `test_product_api_returns_the_catalog_name_price_and_stock` (×7), `test_unknown_product_returns_404` | title, price in pence, `available` = `dataset/products.json`; 404 for an unknown product | REQ-04 |
+| `test_cart_api.py`: `test_cart_api_adds_the_product_and_totals_the_price`, `test_cart_api_removes_a_line_set_to_zero` | 2 × Noir jacket → 2 items, 12000 pence; line → 0 → empty cart | REQ-01, REQ-02 |
+| `test_cart_api.py`: `test_cart_api_refuses_a_sold_out_product` | **xfail, finding A1** | REQ-04 |
+| `test_search_api.py`: `…_suggests_matching_products`, `…_suggests_nothing_for_an_unknown_keyword` | suggestions for "jacket" / none for "zzqqxx" | REQ-08 |
+| `tests/ui/test_cart.py`: `test_cart_prepared_through_the_api_shows_in_the_browser` | API for the set-up, browser for the check | REQ-01 |
 
 **Finding A1:** Brown Shades is sold out (`"available": false`, the product page shows a disabled "Sold Out" button), but `POST /cart/add.js` still adds it (HTTP 200, the cart holds 1 item). The UI test passes; only the API test sees it. The test states the expected behaviour (the add is refused) and is marked `xfail(strict=True)` with the finding: the report lists it as a known defect, and when the store is fixed the test passes and `strict` makes the run fail, so the marker is removed.
 
 ```bash
-pytest -m api          # the API tests only (no browser except the last test)
+pytest tests/api       # the API tests only (no browser)
+pytest tests/ui        # the UI tests only
 ```
 
 ### 3. Authentication state
@@ -353,7 +353,7 @@ def saved_login_state(browser: Browser, base_url: str) -> Path:
     return AUTH_FILE
 ```
 
-Used by `tests/test_auth_state.py` (risk R04). `.auth/customer.json` holds a session: never commit it.
+Used by `tests/ui/test_auth_state.py` (risk R04). `.auth/customer.json` holds a session: never commit it.
 
 ```bash
 # Linux/macOS
@@ -414,10 +414,10 @@ The lab automates the Unit 1 risk priorities on Playwright: 22 browser tests in 
 
 | File | Role |
 | --- | --- |
-| `tests/test_<area>.py` | One file per area; every test has a risk, a suite and a requirement marker |
+| `tests/ui/test_<area>.py` | One file per area; every test has a risk, a suite and a requirement marker |
 | `tests/conftest.py` | Fixtures, network control, auth state |
-| `tests/test_network.py` | Interception, request assertion, fault injection, throttling |
-| `tests/test_auth_state.py` | Saved login and isolation check |
+| `tests/ui/test_network.py` | Interception, request assertion, fault injection, throttling |
+| `tests/ui/test_auth_state.py` | Saved login and isolation check |
 | `pages/` | Page Objects ported from Unit 1 |
 | `pytest.ini` | base URL, tracing, reports, default marker filter, marker list (`--strict-markers`) |
 
@@ -439,7 +439,7 @@ pytest -m "critical and not negative"
 
 | Check | Result |
 | --- | --- |
-| `pytest` | 35 passed (22 browser + 13 API), 1 xfailed (finding A1), 6 deselected (`auth` ×2, `manual` ×3, `data_creating` ×1) |
+| `pytest` | 35 passed (23 UI + 12 API), 1 xfailed (API, finding A1), 6 deselected (`auth` ×2, `manual` ×3, `data_creating` ×1) |
 | `pytest -n auto` | 35 passed, 1 xfailed |
 | `pytest -m auth` (with an account) | 2 passed |
 | Failed test | `test-results/<test>/trace.zip`, screenshot, video |
@@ -474,7 +474,7 @@ Day 8 closes both units: part A revises Unit 2 against Unit 1, part B makes the 
 | Network | Not controlled | Block, assert, fault-inject, throttle |
 | Login | UI login each time | Saved storage state |
 | Speed | Serial | `-n auto` parallel |
-| Selection | `behave --tags=@cart` | `pytest tests/test_cart.py`, `pytest -m add_to_cart` |
+| Selection | `behave --tags=@cart` | `pytest tests/ui/test_cart.py`, `pytest -m add_to_cart` |
 
 Revision questions:
 
