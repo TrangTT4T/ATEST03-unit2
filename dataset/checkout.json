@@ -13,5 +13,10 @@
     {"id": "no-last-name", "missing": "last_name", "error": "Error: Last Name is required"},
     {"id": "no-postal-code", "missing": "postal_code", "error": "Error: Postal Code is required"}
   ],
-  "order_complete_header": "Thank you for your order!"
+  "order_complete_header": "Thank you for your order!",
+  "pdf_receipt": {
+    "file_name_pattern": "^swag-labs-order-\\d{4}-\\d{2}-\\d{2}_\\d{2}-\\d{2}-\\d{2}\\.pdf$",
+    "title": "Order Receipt",
+    "pages": 1
+  }
 }

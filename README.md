@@ -52,9 +52,10 @@ ATEST03-unit2/
 │   ├── test_login.py            # @secure_login                     (High)
 │   ├── test_catalog.py          # @browse_catalog, @product_details (High; sorting Medium)
 │   ├── test_cart.py             # @add_to_cart, @update_cart        (Critical; + finding F1)
-│   ├── test_checkout.py         # @checkout                         (Critical)
+│   ├── test_checkout.py         # @checkout: totals, required fields, PDF receipt (Critical)
 │   └── test_auth_state.py       # @secure_login: saved login + isolation check
 ├── helper_utility/helpers.py    # class Helper: by_locator(), read_test_data(), money_to_float(), Faker data
+├── helper_utility/pdf_receipt.py  # class PdfReceipt: the downloaded order PDF read into fields (pypdf)
 ├── helper_utility/steps.py      # the `step` fixture: numbered steps -> Allure step + trace group
 └── docs/Unit2_Playwright_vi.md, Unit2_Playwright_en.md
 ```
@@ -67,7 +68,7 @@ Requires **Python 3.12**: the version in `.python-version` (PyCharm, VS Code, py
 pip install -r requirements.txt
 playwright install chromium
 cp .env.example .env                 # fill in the demo accounts shown on https://www.saucedemo.com
-pytest                               # 43 tests: 42 pass, 1 xfail (finding F1)
+pytest                               # 46 tests: 45 pass, 1 xfail (finding F1)
 pytest -m smoke                      # login, add to cart, complete an order
 pytest -m critical                   # every Critical-risk test
 pytest -m add_to_cart                # every test of one requirement
@@ -110,6 +111,10 @@ def test_add_one_product_to_the_cart(logged_in_shop, products, step):
         assert logged_in_shop.cart.get_product_names() == [backpack]
         assert logged_in_shop.cart.get_product_price(backpack) == products[backpack]["price"]
 ```
+
+## PDF receipt
+
+The order-complete page has a **Generate PDF order** button. `test_order_pdf_matches_the_order` (one case per order of `dataset/checkout.json`) downloads the PDF (`BasePage.click_and_download`, Playwright's `expect_download`), reads it with `PdfReceipt` (`helper_utility/pdf_receipt.py`, pypdf) and compares it field by field with the order it placed: the file name, one page, the title, today's date, the customer's name and postal code, every product with its price from `products.json`, the item total, tax and total, the thank-you text. The PDF text is letter-spaced in places ("T ax", "T -Shirt"), so labels and names are compared without spaces.
 
 ## Test data
 

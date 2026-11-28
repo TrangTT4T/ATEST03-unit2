@@ -36,6 +36,7 @@ ATEST03-unit2/
 │   ├── test_login.py  test_catalog.py  test_cart.py  test_checkout.py   # mỗi khu vực một file
 │   └── test_auth_state.py       # phiên đăng nhập đã lưu + kiểm tra cô lập
 ├── helper_utility/helpers.py    # class Helper: by_locator(), read_test_data(), money_to_float(), dữ liệu Faker
+├── helper_utility/pdf_receipt.py  # class PdfReceipt: đọc PDF đơn hàng thành từng trường (pypdf)
 └── helper_utility/steps.py      # fixture `step`: bước đánh số -> bước Allure + nhóm trong trace
 ```
 
@@ -175,7 +176,7 @@ Test không tự chứa giá trị: mỗi khu vực một file JSON, đọc bằ
 | `login.json` | `rejected`: tên tài khoản → lỗi (user không tồn tại, sai mật khẩu, user bị khoá, thiếu username, thiếu mật khẩu); lỗi "chưa đăng nhập" | `test_login.py`, `test_auth_state.py` |
 | `catalog.json` | `sorting`: 4 lựa chọn, sắp theo tên hoặc giá, tăng hoặc giảm | `test_catalog.py` |
 | `cart.json` | `add` (danh sách sản phẩm), `remove` (sản phẩm + món cần xoá) | `test_cart.py` |
-| `checkout.json` | `totals` (sản phẩm → item total, thuế 8%, total), `missing_information` (trường để trống → lỗi), tiêu đề xác nhận đơn | `test_checkout.py` |
+| `checkout.json` | `totals` (sản phẩm → item total, thuế 8%, total), `missing_information` (trường để trống → lỗi), tiêu đề xác nhận đơn, `pdf_receipt` (mẫu tên file, số trang, tiêu đề) | `test_checkout.py` |
 
 ```python
 CART = Helper.read_test_data("cart")
@@ -279,7 +280,7 @@ cd ATEST03-unit2
 pip install -r requirements.txt
 playwright install chromium
 cp .env.example .env              # điền tài khoản demo ghi trên https://www.saucedemo.com
-pytest --collect-only -q          # 43 test
+pytest --collect-only -q          # 46 test
 pytest -m smoke                   # 3 test: đăng nhập, thêm vào giỏ, hoàn tất đơn
 pytest --headed --slowmo 300      # xem trình duyệt chạy
 ```
@@ -332,6 +333,23 @@ def test_reset_app_state_empties_the_cart_and_resets_the_buttons(fill_cart, step
 ```
 
 Test ghi hành vi đúng và được đánh dấu `xfail(strict=True)` kèm mô tả phát hiện: báo cáo liệt kê nó là lỗi đã biết, và khi shop sửa xong thì test pass, `strict` làm lần chạy fail để nhắc bỏ marker. Chạy bỏ qua marker để xem bước fail: `pytest --runxfail tests/test_cart.py -k reset`.
+
+### 2b. Tải file: biên lai PDF
+
+Trang hoàn tất đơn có nút **Generate PDF order** tải về biên lai (`swag-labs-order-<ngày>_<giờ>.pdf`). `BasePage.click_and_download(locator, folder)` bọc `expect_download()` của Playwright và lưu file với tên gốc vào `tmp_path` của pytest; `CheckoutCompletePage.download_pdf_order(folder)` dùng method này.
+
+`PdfReceipt` (`helper_utility/pdf_receipt.py`, pypdf) đọc PDF thành từng trường, nên test so dữ liệu chứ không so nguyên văn:
+
+| Trường | So với |
+| --- | --- |
+| tên file, số trang, tiêu đề | `pdf_receipt` trong `checkout.json` (mẫu tên file, 1 trang, "Order Receipt") |
+| ngày đặt | hôm nay |
+| người nhận: tên, mã bưu điện | khách hàng Faker mà test đã nhập |
+| sản phẩm: tên → giá | giá trong `products.json` của các sản phẩm test đã đặt (không thừa dòng nào) |
+| item total, thuế, total | ca tương ứng trong `totals` của `checkout.json` |
+| lời cảm ơn | `order_complete_header` trong `checkout.json` |
+
+Chữ trích từ PDF bị dãn ở vài chỗ ("T ax $ 3.20", "Sauce Labs Bolt T -Shirt"), nên `PdfReceipt` so nhãn và tên sản phẩm sau khi bỏ khoảng trắng.
 
 ### 3. Trạng thái đăng nhập
 
@@ -387,14 +405,14 @@ Test nào cũng mang một marker yêu cầu (`@pytest.mark.add_to_cart` …) v�
 
 Unit 2 · LO3 · Assignment/Lab · 150 phút · Hybrid
 
-Buổi lab tự động hoá các ưu tiên theo rủi ro trên Playwright: 43 test, tất cả đều chạy mặc định (Swag Labs không cần loại test manual hay tạo dữ liệu thật).
+Buổi lab tự động hoá các ưu tiên theo rủi ro trên Playwright: 46 test, tất cả đều chạy mặc định (Swag Labs không cần loại test manual hay tạo dữ liệu thật).
 
 ### 1. Các luồng ưu tiên (từ bảng rủi ro)
 
 | Ưu tiên | Luồng | Rủi ro | Test | Kỹ thuật Unit 2 |
 | --- | --- | --- | --- | --- |
 | P1 | Thêm vào giỏ, xoá, giữ giỏ khi mua tiếp, reset | R01 Critical | `test_cart.py`: 10 test (ca trong `dataset/cart.json`), 1 test `xfail` (F1) | factory `fill_cart`, `parametrize`, `to_be_hidden()` |
-| P1 | Checkout: thông tin, tổng tiền, hoàn tất | R02 Critical | `test_checkout.py`: 7 test (ca trong `dataset/checkout.json`) | khách hàng Faker, `to_have_text` trên tổng tiền |
+| P1 | Checkout: thông tin, tổng tiền, hoàn tất | R02 Critical | `test_checkout.py`: 10 test (ca trong `dataset/checkout.json`), 3 test so biên lai PDF tải về | khách hàng Faker, `to_have_text` trên tổng tiền, `expect_download` + `PdfReceipt` |
 | P1 | Trang sản phẩm = danh sách | R03 High | `test_catalog.py`: 6 ca (mỗi sản phẩm một) | `parametrize` trên `products.json` |
 | P1 | Đăng nhập, đăng xuất, user bị khoá, phiên đã lưu | R04 High | `test_login.py` 8 test + `test_auth_state.py` 2 test | `accounts` từ `.env` + Faker, `saved_login_state` |
 | P1 | Tên, mô tả, giá trong danh sách | R05 High | `test_catalog.py`: 6 ca | `product_card(name)` |
@@ -430,8 +448,8 @@ pytest tests/test_checkout.py       # một khu vực
 
 | Kiểm tra | Kết quả |
 | --- | --- |
-| `pytest` | 42 pass, 1 xfailed (phát hiện F1), khoảng 50 giây |
-| `pytest -n 4` | 42 pass, 1 xfailed, khoảng 23 giây (2 lần chạy, cùng kết quả) |
+| `pytest` | 45 pass, 1 xfailed (phát hiện F1), khoảng 60 giây |
+| `pytest -n 4` | 45 pass, 1 xfailed, khoảng 26 giây |
 | `pytest` khi chưa có `.env` | mọi test cần tài khoản được bỏ qua, kèm tên biến cần điền |
 | Test fail | `test-results/<test>/trace.zip`, ảnh, video |
 
@@ -562,5 +580,5 @@ Select-String -Path tests\*.py -Pattern ':nth-child|nth=|\.nth\('               
 | Kiểm tra | Kết quả |
 | --- | --- |
 | Các lệnh tìm ở B3 | không có kết quả |
-| Chạy tuần tự + 2 lần song song (`-n 4`) | mỗi lần 42 pass + 1 xfailed, 0 test chập chờn |
+| Chạy tuần tự + chạy song song (`-n 4`) | mỗi lần 45 pass + 1 xfailed, 0 test chập chờn |
 | Cố ý làm fail | `trace.zip`, `test-failed-1.png`, `video.webm` trong `test-results/` |

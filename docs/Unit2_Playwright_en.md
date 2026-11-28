@@ -36,6 +36,7 @@ ATEST03-unit2/
 │   ├── test_login.py  test_catalog.py  test_cart.py  test_checkout.py   # one file per area
 │   └── test_auth_state.py       # saved login + isolation check
 ├── helper_utility/helpers.py    # class Helper: by_locator(), read_test_data(), money_to_float(), Faker data
+├── helper_utility/pdf_receipt.py  # class PdfReceipt: the order PDF read into fields (pypdf)
 └── helper_utility/steps.py      # the `step` fixture: numbered steps -> Allure step + trace group
 ```
 
@@ -175,7 +176,7 @@ Tests hold no values of their own: they read one JSON file per area through `Hel
 | `login.json` | `rejected`: account name → error (unknown user, wrong password, locked-out user, missing username, missing password); the "not logged in" error | `test_login.py`, `test_auth_state.py` |
 | `catalog.json` | `sorting`: the 4 options, sorted by name or price, ascending or descending | `test_catalog.py` |
 | `cart.json` | `add` (lists of products), `remove` (products + the one to remove) | `test_cart.py` |
-| `checkout.json` | `totals` (products → item total, 8% tax, total), `missing_information` (empty field → error), the confirmation heading | `test_checkout.py` |
+| `checkout.json` | `totals` (products → item total, 8% tax, total), `missing_information` (empty field → error), the confirmation heading, `pdf_receipt` (file name pattern, pages, title) | `test_checkout.py` |
 
 ```python
 CART = Helper.read_test_data("cart")
@@ -279,7 +280,7 @@ cd ATEST03-unit2
 pip install -r requirements.txt
 playwright install chromium
 cp .env.example .env              # fill in the demo accounts shown on https://www.saucedemo.com
-pytest --collect-only -q          # 43 tests
+pytest --collect-only -q          # 46 tests
 pytest -m smoke                   # 3 tests: login, add to cart, complete an order
 pytest --headed --slowmo 300      # watch it run
 ```
@@ -332,6 +333,23 @@ def test_reset_app_state_empties_the_cart_and_resets_the_buttons(fill_cart, step
 ```
 
 The test states the expected behaviour and is marked `xfail(strict=True)` with the finding: the report lists it as a known defect, and when the shop is fixed the test passes and `strict` makes the run fail, so the marker is removed. Run it without the marker to see the failing step: `pytest --runxfail tests/test_cart.py -k reset`.
+
+### 2b. Downloads: the PDF receipt
+
+The order-complete page has a **Generate PDF order** button that downloads the receipt (`swag-labs-order-<date>_<time>.pdf`). `BasePage.click_and_download(locator, folder)` wraps Playwright's `expect_download()` and saves the file under its own name in pytest's `tmp_path`; `CheckoutCompletePage.download_pdf_order(folder)` uses it.
+
+`PdfReceipt` (`helper_utility/pdf_receipt.py`, pypdf) reads the PDF into fields, so the test compares data, not raw text:
+
+| Field | Compared with |
+| --- | --- |
+| file name, page count, title | `checkout.json` `pdf_receipt` (name pattern, 1 page, "Order Receipt") |
+| order date | today |
+| ship to: name, postal code | the Faker customer the test typed in |
+| items: name → price | `products.json` prices of the products the test ordered (and no other line) |
+| item total, tax, total | the case in `checkout.json` `totals` |
+| thank-you text | `checkout.json` `order_complete_header` |
+
+The PDF's text comes out letter-spaced in places ("T ax $ 3.20", "Sauce Labs Bolt T -Shirt"), so `PdfReceipt` compares labels and product names without spaces.
 
 ### 3. Authentication state
 
@@ -387,14 +405,14 @@ Every test carries one requirement marker (`@pytest.mark.add_to_cart` …) and o
 
 Unit 2 · LO3 · Assignment/Lab · 150 min · Hybrid
 
-The lab automates the risk priorities on Playwright: 43 tests, all in the default run (Swag Labs needs no manual or data-creating exclusions).
+The lab automates the risk priorities on Playwright: 46 tests, all in the default run (Swag Labs needs no manual or data-creating exclusions).
 
 ### 1. Prioritised workflows (from the risk table)
 
 | Priority | Workflow | Risk | Tests | Unit 2 technique |
 | --- | --- | --- | --- | --- |
 | P1 | Add to cart, remove, keep while shopping, reset | R01 Critical | `test_cart.py`: 10 tests (cases from `dataset/cart.json`), 1 of them `xfail` (F1) | `fill_cart` factory, `parametrize`, `to_be_hidden()` |
-| P1 | Checkout: information, totals, complete | R02 Critical | `test_checkout.py`: 7 tests (cases from `dataset/checkout.json`) | Faker customer, `to_have_text` on totals |
+| P1 | Checkout: information, totals, complete | R02 Critical | `test_checkout.py`: 10 tests (cases from `dataset/checkout.json`), 3 of them compare the downloaded PDF receipt | Faker customer, `to_have_text` on totals, `expect_download` + `PdfReceipt` |
 | P1 | Product page = product list | R03 High | `test_catalog.py`: 6 cases (one per product) | `parametrize` over `products.json` |
 | P1 | Login, logout, locked-out user, saved session | R04 High | `test_login.py` 8 tests + `test_auth_state.py` 2 tests | `accounts` from `.env` + Faker, `saved_login_state` |
 | P1 | Product list names, descriptions and prices | R05 High | `test_catalog.py`: 6 cases | `product_card(name)` |
@@ -430,8 +448,8 @@ pytest tests/test_checkout.py       # one area
 
 | Check | Result |
 | --- | --- |
-| `pytest` | 42 passed, 1 xfailed (finding F1), about 50 s |
-| `pytest -n 4` | 42 passed, 1 xfailed, about 23 s (2 runs, same result) |
+| `pytest` | 45 passed, 1 xfailed (finding F1), about 60 s |
+| `pytest -n 4` | 45 passed, 1 xfailed, about 26 s |
 | `pytest` without `.env` | every test that needs an account is skipped, with the variables to set |
 | Failed test | `test-results/<test>/trace.zip`, screenshot, video |
 
@@ -562,5 +580,5 @@ Select-String -Path tests\*.py -Pattern ':nth-child|nth=|\.nth\('               
 | Check | Result |
 | --- | --- |
 | B3 searches | no matches |
-| Serial run + 2 parallel runs (`-n 4`) | 42 passed + 1 xfailed each time, 0 flaky |
+| Serial run + parallel run (`-n 4`) | 45 passed + 1 xfailed each time, 0 flaky |
 | Forced failure | `trace.zip`, `test-failed-1.png`, `video.webm` in `test-results/` |

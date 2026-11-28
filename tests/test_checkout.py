@@ -3,10 +3,14 @@
 The cases come from dataset/checkout.json; the customer is made up by Faker for every test.
 Requirement: @checkout (REQ-03).
 """
+import re
+from datetime import datetime
+
 import pytest
 from playwright.sync_api import expect
 
 from helper_utility.helpers import Helper
+from helper_utility.pdf_receipt import PdfReceipt
 
 pytestmark = [pytest.mark.critical, pytest.mark.checkout]
 CHECKOUT = Helper.read_test_data("checkout")
@@ -89,3 +93,47 @@ def test_checkout_information_is_required(fill_cart, checkout_information, page,
     with step(step_number, f"Verify the error {case['error']!r} and that the overview is not opened"):
         expect(shop.checkout_information.error_message).to_have_text(case["error"])
         expect(shop.checkout_information.page_title).to_have_text("Checkout: Your Information")
+
+
+@pytest.mark.regression
+@pytest.mark.parametrize("case", CHECKOUT["totals"], ids=[case["id"] for case in CHECKOUT["totals"]])
+def test_order_pdf_matches_the_order(fill_cart, checkout_information, products, tmp_path, step, case):
+    """The "Generate PDF order" receipt holds the same customer, products, prices and totals as the order."""
+    # Test data
+    customer = checkout_information  # made up by Faker
+    receipt_data = CHECKOUT["pdf_receipt"]
+    expected_items = {name: products[name]["price"] for name in case["products"]}
+    expected_totals = {"item_total": case["item_total"], "tax": case["tax"], "total": case["total"]}
+    today = datetime.now()
+
+    # Execution steps
+    step_number = 1
+    with step(step_number, f"Order {len(case['products'])} products as {customer['first_name']}"):
+        shop = fill_cart(case["products"])
+        shop.inventory.open_cart()
+        shop.cart.click_checkout()
+        shop.checkout_information.fill_information_and_continue(customer["first_name"], customer["last_name"],
+                                                                customer["postal_code"])
+        shop.checkout_overview.click_finish()
+    step_number += 1
+    with step(step_number, "Click Generate PDF order and save the download"):
+        pdf_path = shop.checkout_complete.download_pdf_order(tmp_path)
+        receipt = PdfReceipt(pdf_path)
+    step_number += 1
+    with step(step_number, f"Verify the file {pdf_path.name}: {receipt_data['pages']} page, the receipt title"):
+        assert re.match(receipt_data["file_name_pattern"], pdf_path.name), f"Unexpected file name {pdf_path.name}"
+        assert receipt.page_count == receipt_data["pages"]
+        assert receipt.contains(receipt_data["title"])
+    step_number += 1
+    with step(step_number, "Verify the order date is today and the receipt ships to the customer"):
+        assert receipt.order_date.startswith(f"{today:%B} {today.day}, {today.year}"), receipt.order_date
+        assert receipt.customer_name == f"{customer['first_name']} {customer['last_name']}"
+        assert receipt.postal_code == customer["postal_code"]
+    step_number += 1
+    with step(step_number, f"Verify the products and prices: {expected_items}"):
+        assert receipt.item_count == len(expected_items), f"The receipt lists {receipt.items}"
+        assert receipt.item_prices(case["products"]) == expected_items
+    step_number += 1
+    with step(step_number, f"Verify the totals {expected_totals} and the thank-you text"):
+        assert receipt.totals == expected_totals
+        assert receipt.contains(CHECKOUT["order_complete_header"])

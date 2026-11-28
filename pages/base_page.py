@@ -29,6 +29,7 @@ import contextlib
 import logging
 import re
 from collections.abc import Iterator
+from pathlib import Path
 
 from playwright.sync_api import Locator, Page
 from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
@@ -121,6 +122,22 @@ class BasePage:
         self.logger.info("Type %r into %s", "***" if secret else text, locator)
         with self._report_timeout("Typing into", locator):
             self.find_element(locator).fill(text)
+
+    def click_and_download(self, locator: str, folder: Path) -> Path:
+        """Click an element that starts a download and save the file in ``folder`` under its own name.
+
+        :param locator: XPath locator of the button or link
+        :param folder: where to save the file (e.g. pytest's tmp_path)
+        :return: the path of the saved file
+        """
+        with self._report_timeout("Waiting for the download started by clicking", locator):
+            with self.page.expect_download() as download_info:
+                self.click_element(locator)
+        download = download_info.value
+        path = Path(folder) / download.suggested_filename
+        download.save_as(path)
+        self.logger.info("Downloaded %s", path.name)
+        return path
 
     def select_option(self, locator: str, label: str):
         """Choose the option labelled ``label`` in a drop-down list.
