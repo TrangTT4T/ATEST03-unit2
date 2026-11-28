@@ -34,9 +34,14 @@ ATEST03-unit2/
 ├── tests/
 │   ├── conftest.py              # fixtures: products, accounts, shop, logged_in_shop, fill_cart, saved login, step
 │   ├── test_login.py  test_catalog.py  test_cart.py  test_checkout.py   # one file per area
-│   └── test_auth_state.py       # saved login + isolation check
+│   ├── test_auth_state.py       # saved login + isolation check
+│   ├── test_visual.py           # visual comparison with the standard user (finding V1)
+│   └── test_mobile.py           # an iPhone 13 context: layout and an order
 ├── helper_utility/helpers.py    # class Helper: by_locator(), read_test_data(), money_to_float(), Faker data
 ├── helper_utility/pdf_receipt.py  # class PdfReceipt: the order PDF read into fields (pypdf)
+├── helper_utility/visual_comparison.py  # class VisualComparison: two screenshots, pixel by pixel (Pillow)
+├── tools/flaky_report.py       # run the suite N times: stable / failing / flaky tests (Day 8)
+├── allure/categories.json      # Allure failure categories (Day 8 failure analysis)
 └── helper_utility/steps.py      # the `step` fixture: numbered steps -> Allure step + trace group
 ```
 
@@ -86,6 +91,10 @@ pytest session
 
 A context costs milliseconds, so every test starts logged out with an empty cart without restarting the browser. Swag Labs keeps the login in a cookie (`session-username`) and the cart in localStorage (`cart-contents`): both belong to the context, so no test sees another test's cart.
 
+#### Contexts beyond isolation: a phone
+
+A context can also emulate a device. `phone_shop` (`tests/conftest.py`) opens Swag Labs as an iPhone 13 from Playwright's device list — 390×844 screen, touch, mobile user agent, pixel density 3 — in Chromium, logged in with the saved cookie. `tests/test_mobile.py` checks that the products page fits the phone (one full-width card per row, no sideways scroll) and that a customer can order on it. Other browsers: `pytest --browser firefox --browser webkit` runs the suite in each (install them first with `playwright install firefox webkit`).
+
 ### 3. Locators
 
 Swag Labs marks its elements with `data-test` attributes, made for test automation. They do not change when the layout or the text changes, so they come first:
@@ -97,6 +106,8 @@ Swag Labs marks its elements with `data-test` attributes, made for test automati
 | 3 | Scoped to a parent by its text | `//*[@data-test='inventory-item'][.//*[@data-test='inventory-item-name' and normalize-space()='{}']]//button` — the button of one product card |
 | 4 | Button text inside a scope | `…//button[normalize-space()='Remove']` |
 | Never | Position | `(//button)[3]`, `//div[2]/a` |
+
+`testid=checkout` is a short form of `//*[@data-test='checkout']` (the prefix `testid` in `Helper.by_locator`); the pages keep the full XPath, the short form is there for quick checks and new pages.
 
 #### Locators and the custom BasePage methods (the same layout as Unit 1)
 
@@ -122,6 +133,7 @@ Locators are plain XPath strings that describe the element, grouped under a comm
 | `name=user-name` | `xpath=//*[@name='user-name']` |
 | `link=About` / `partial link=Abo` | `xpath=//a[normalize-space()='…']` / `xpath=//a[contains(normalize-space(),'…')]` |
 | `css=#checkout`, `tag_name=h3`, `class_name=error`, `xpath=//h3` | `css=#checkout`, `css=h3`, `css=.error`, `xpath=//h3` |
+| `testid=checkout` | `xpath=//*[@data-test='checkout']` |
 | `foo=bar` | `ValueError: Element locator with prefix 'foo' is not supported: 'foo=bar'` |
 
 Pages never call `self.page`: they call the `BasePage` methods, which log the action (shown in the report of a failed test, passwords as `***`):
@@ -269,6 +281,17 @@ Swag Labs has six demo accounts; four have defects on purpose. `pytest --account
 | `error-user` | 15 failed | sorting does nothing; only 3 of the 6 products can be added; Remove on the products page does nothing; the product page has no description; the last name field takes no text, yet the form goes on without it; Finish does not complete the order |
 | `problem-user` | 19 failed | sorting does nothing; product names open the wrong product page (Fleece Jacket: "ITEM NOT FOUND"); only 3 products can be added, Remove on the products page does nothing; typing the last name overwrites the first name, so checkout never gets past the information form |
 
+### 5c. Visual comparison (`tests/test_visual.py`)
+
+Text assertions miss what a customer sees: a wrong picture, a button out of place. Playwright for Python has no screenshot assertion, so `VisualComparison` (`helper_utility/visual_comparison.py`, Pillow) compares two screenshots pixel by pixel: a pixel differs when a colour channel moves by more than 16 (anti-aliasing noise stays below), and the test allows at most 0.1 % differing pixels. The expected, actual and diff images (differing pixels in red) are saved and attached to Allure.
+
+The reference is the standard user's products page, taken in the same run, browser and viewport (`BasePage.take_screenshot()` waits for no network traffic and loaded fonts): no baseline image is stored, so fonts and rendering never differ between machines.
+
+| Case | Result |
+| --- | --- |
+| `standard-user` against itself | passes: the comparison is stable |
+| `visual-user` | **xfail, finding V1**: 2.8 % of the pixels differ — the Backpack shows a dog, wrong prices, shifted titles and button, the cart icon moved onto the sort list |
+
 ### 6. Isolation check
 
 `tests/test_auth_state.py::test_login_state_does_not_leak_into_other_tests` proves that a test using the default `page` is not logged in even when another test in the same session uses the saved login.
@@ -280,7 +303,7 @@ cd ATEST03-unit2
 pip install -r requirements.txt
 playwright install chromium
 cp .env.example .env              # fill in the demo accounts shown on https://www.saucedemo.com
-pytest --collect-only -q          # 46 tests
+pytest --collect-only -q          # 50 tests
 pytest -m smoke                   # 3 tests: login, add to cart, complete an order
 pytest --headed --slowmo 300      # watch it run
 ```
@@ -407,6 +430,16 @@ Safe because every test has its own context (Day 5) and no test depends on anoth
 
 Every test carries one requirement marker (`@pytest.mark.add_to_cart` …) and one risk-level marker: `pytest -m add_to_cart` runs one requirement, `pytest -m critical --collect-only -q` lists every Critical-risk test, and the markers appear in the HTML report. `-rfEs` in `pytest.ini` lists failures, errors and skips (with their reason) at the end of the run.
 
+#### Allure: failure categories, environment, evidence
+
+`tests/conftest.py` prepares the Allure results at the start of every run (Day 8, failure analysis):
+
+| What | Where it comes from | What the report shows |
+| --- | --- | --- |
+| Categories | `allure/categories.json`, copied into the results | every failure sorted: **Product defects** (an assertion failed: the shop showed a wrong value), **Test or environment problems** (an exception: a timeout, a missing element), **Known defects** (xfail), **Set-up** (skipped for a missing `.env` value) |
+| Environment | `environment.properties`, written by `pytest_configure` | base URL, browsers, `--account`, Python and Playwright versions of the run |
+| Evidence of a failure | `pytest_runtest_makereport` | in the failed test: a full-page screenshot, the page address, the **Playwright trace** (`trace.zip`, open it with `playwright show-trace`) and the video |
+
 ### 6. Review questions
 
 1. What does a trace show that a screenshot cannot?
@@ -420,7 +453,7 @@ Every test carries one requirement marker (`@pytest.mark.add_to_cart` …) and o
 
 Unit 2 · LO3 · Assignment/Lab · 150 min · Hybrid
 
-The lab automates the risk priorities on Playwright: 46 tests, all in the default run (Swag Labs needs no manual or data-creating exclusions).
+The lab automates the risk priorities on Playwright: 50 tests, all in the default run (Swag Labs needs no manual or data-creating exclusions).
 
 ### 1. Prioritised workflows (from the risk table)
 
@@ -431,6 +464,8 @@ The lab automates the risk priorities on Playwright: 46 tests, all in the defaul
 | P1 | Product page = product list | R03 High | `test_catalog.py`: 6 cases (one per product) | `parametrize` over `products.json` |
 | P1 | Login, logout, locked-out user, saved session | R04 High | `test_login.py` 8 tests + `test_auth_state.py` 2 tests | `accounts` from `.env` + Faker, `saved_login_state` |
 | P1 | Product list names, descriptions and prices | R05 High | `test_catalog.py`: 6 cases | `product_card(name)` |
+| P2 | Looks right: visual comparison | R05 High | `test_visual.py`: 2 cases, 1 `xfail` (V1) | `VisualComparison`, reference taken in the same run |
+| P2 | Works on a phone | R01/R05 Medium | `test_mobile.py`: 2 tests | iPhone 13 context from `playwright.devices` |
 | P2 | Sorting | R07 Medium | `test_catalog.py`: 4 cases (`dataset/catalog.json`) | expected order computed from `products.json` |
 
 ### 2. Files
@@ -440,6 +475,8 @@ The lab automates the risk priorities on Playwright: 46 tests, all in the defaul
 | `tests/test_<area>.py` | One file per area; every test has a risk, a suite and a requirement marker |
 | `tests/conftest.py` | Fixtures: data, accounts, page objects, logged-in shop, cart factory, saved login, steps |
 | `tests/test_auth_state.py` | Saved login and isolation check |
+| `tools/flaky_report.py` | Flaky-test report over N runs (Day 8) |
+| `allure/categories.json` | Failure categories of the Allure report |
 | `pages/` | Page Objects, one per page of the shop |
 | `dataset/` | Test data, one file per area |
 | `pytest.ini` | base URL, tracing, reports, marker list (`--strict-markers`) |
@@ -463,8 +500,8 @@ pytest tests/test_checkout.py       # one area
 
 | Check | Result |
 | --- | --- |
-| `pytest` | 45 passed, 1 xfailed (finding F1), about 60 s |
-| `pytest -n 4` | 45 passed, 1 xfailed, about 26 s |
+| `pytest` | 48 passed, 2 xfailed (findings F1, V1), about 72 s |
+| `pytest -n 4` | 48 passed, 2 xfailed, about 31 s |
 | `pytest` without `.env` | every test that needs an account is skipped, with the variables to set |
 | Failed test | `test-results/<test>/trace.zip`, screenshot, video |
 
@@ -526,13 +563,16 @@ test fails
 
 #### B2. Flaky-test control
 
-Run the suite several times and compare; each run writes its own JUnit file:
+`tools/flaky_report.py` does the comparison: it runs the suite N times (or reads JUnit files) and sorts every test:
 
 ```bash
-pytest --junitxml=reports/run_1.xml
-pytest --junitxml=reports/run_2.xml
-pytest --junitxml=reports/run_3.xml
+python tools/flaky_report.py --runs 3                        # runs pytest 3 times, then reports
+python tools/flaky_report.py --runs 5 -- tests/test_checkout.py -k pdf   # extra pytest arguments after --
+python tools/flaky_report.py reports/run_1.xml reports/run_2.xml        # existing JUnit files
 ```
+
+It prints the stable, failing and flaky tests, with the outcome of each run, and exits with 1 when a test is failing or flaky. It found a real flaky test while this page was written: the PDF receipt letter-spaces some names ("T onya Jordan"), so a receipt test failed only when Faker made up such a name; the name is now compared without spaces.
+
 
 | Result over the runs | Meaning | Action |
 | --- | --- | --- |
@@ -595,5 +635,5 @@ Select-String -Path tests\*.py -Pattern ':nth-child|nth=|\.nth\('               
 | Check | Result |
 | --- | --- |
 | B3 searches | no matches |
-| Serial run + parallel run (`-n 4`) | 45 passed + 1 xfailed each time, 0 flaky |
+| Serial run, parallel run (`-n 4`), `tools/flaky_report.py --runs 3 -- -n 4` | 48 passed + 2 xfailed each time; the flaky report: 50 stable, 0 failing, 0 flaky |
 | Forced failure | `trace.zip`, `test-failed-1.png`, `video.webm` in `test-results/` |

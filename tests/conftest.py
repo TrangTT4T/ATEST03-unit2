@@ -10,16 +10,21 @@ Fixture map (Day 5-6):
   shop               Page Objects bound to this test's page
   logged_in_shop     shop, logged in with the saved cookie (no login form), on the products page
   fill_cart          factory fixture: add products from the products page
+  phone_shop         shop in a context emulating an iPhone 13 (Day 5: contexts beyond isolation)
+  open_shop_as       factory: log another account in, in a context of its own (visual comparison)
   saved_login_state  log in ONCE through the form, save the cookies; again only when they are about to expire
   step               numbered test steps: Allure step + trace group (helper_utility/steps.py)
 """
 import logging
 import os
+import platform
 import shutil
 import time
+from importlib.metadata import version
 from pathlib import Path
 from types import SimpleNamespace
 
+import allure
 import pytest
 from dotenv import load_dotenv
 from playwright.sync_api import Browser, Page
@@ -33,6 +38,7 @@ ROOT = Path(__file__).resolve().parent.parent
 load_dotenv(ROOT / ".env")  # the demo accounts live in .env, which git ignores
 ALLURE_RESULTS = ROOT / "reports" / "allure-results"
 AUTH_DIR = ROOT / ".auth"  # saved login states (git ignores it)
+PHONE = "iPhone 13"  # a Playwright device: viewport, touch, user agent, scale
 LOGIN_STATE_MAX_AGE = 9 * 60  # seconds: Swag Labs' session cookie expires 10 minutes after the login
 # Every Swag Labs demo account (listed on its login page) and the .env variable that holds its username.
 ACCOUNT_VARIABLES = {
@@ -66,6 +72,54 @@ def pytest_configure(config):
     """
     if not hasattr(config, "workerinput"):
         shutil.rmtree(ALLURE_RESULTS, ignore_errors=True)
+        write_allure_settings(config)
+
+
+def write_allure_settings(config):
+    """Day 6 reporting / Day 8 failure analysis: what the Allure report shows next to the results.
+
+    * categories.json (allure/categories.json): sorts every failure into a known defect (xfail),
+      a product defect (an assertion failed: the shop showed a wrong value) or a test or environment
+      problem (an exception: a timeout, a missing element, a browser error);
+    * environment.properties: the base URL, browsers, account, Python and Playwright versions of this run.
+    """
+    ALLURE_RESULTS.mkdir(parents=True, exist_ok=True)
+    shutil.copy(ROOT / "allure" / "categories.json", ALLURE_RESULTS / "categories.json")
+    environment = {
+        "Base.URL": config.getoption("base_url") or config.getini("base_url"),
+        "Browsers": ", ".join(config.getoption("browser") or ["chromium"]),
+        "Account": config.getoption("--account"),
+        "Python": platform.python_version(),
+        "Playwright": version("playwright"),
+    }
+    lines = [f"{key}={value}" for key, value in environment.items()]
+    (ALLURE_RESULTS / "environment.properties").write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+@pytest.hookimpl(wrapper=True)
+def pytest_runtest_makereport(item, call):
+    """Attach the evidence of a failed browser test to Allure.
+
+    * call phase: a full-page screenshot and the address of the page, in the test body;
+    * teardown phase: the trace.zip and the video. pytest-playwright writes them when the browser
+      context closes, which is after the test body, so they are attached once its own teardown
+      report is done (they show under "Tear down").
+    """
+    report = yield
+    page = item.funcargs.get("page")
+    if report.when == "call":
+        item.call_failed = report.failed
+        if report.failed and page is not None and not page.is_closed():
+            allure.attach(page.screenshot(full_page=True), name="Page at the failure",
+                          attachment_type=allure.attachment_type.PNG)
+            allure.attach(page.url, name="Address at the failure", attachment_type=allure.attachment_type.TEXT)
+    elif report.when == "teardown" and getattr(item, "call_failed", False) and "output_path" in item.funcargs:
+        output_path = Path(item.funcargs["output_path"])
+        for trace in output_path.glob("*.zip"):
+            allure.attach.file(str(trace), name="Playwright trace (open: playwright show-trace)", extension="zip")
+        for video in output_path.glob("*.webm"):
+            allure.attach.file(str(video), name="Video", attachment_type=allure.attachment_type.WEBM)
+    return report
 
 
 # --- browser context (isolation) ------------------------------------------------
@@ -125,14 +179,34 @@ def checkout_information() -> dict:
 
 
 # --- page objects ---------------------------------------------------------------
-@pytest.fixture
-def shop(page: Page) -> SimpleNamespace:
-    """Every Page Object, bound to this test's page: shop.login, shop.inventory, shop.cart ..."""
+def make_shop(page: Page) -> SimpleNamespace:
+    """Every Page Object, bound to ``page``: shop.login, shop.inventory, shop.cart ..."""
     return SimpleNamespace(
         home=BasePage(page), login=LoginPage(page), inventory=InventoryPage(page), product=ProductPage(page),
         cart=CartPage(page), checkout_information=CheckoutInformationPage(page),
         checkout_overview=CheckoutOverviewPage(page), checkout_complete=CheckoutCompletePage(page),
     )
+
+
+@pytest.fixture
+def shop(page: Page) -> SimpleNamespace:
+    """Every Page Object, bound to this test's page."""
+    return make_shop(page)
+
+
+@pytest.fixture
+def phone_shop(browser: Browser, playwright, base_url: str, saved_login_state) -> SimpleNamespace:
+    """Day 5, browser contexts: ``shop`` in a context that emulates an iPhone 13 (390x844 screen, touch,
+    mobile user agent, device scale 3), logged in with the saved cookie, on the products page.
+    """
+    device = {key: value for key, value in playwright.devices[PHONE].items() if key != "default_browser_type"}
+    context = browser.new_context(**device, base_url=base_url)
+    account_shop = make_shop(context.new_page())
+    account_shop.inventory.add_login_cookies(saved_login_state)
+    account_shop.inventory.open_page()
+    account_shop.inventory.verify_products_page_is_open()
+    yield account_shop
+    context.close()
 
 
 @pytest.fixture
@@ -156,6 +230,33 @@ def fill_cart(logged_in_shop):
         logged_in_shop.inventory.add_products_to_cart(product_names)
         return logged_in_shop
     return add_products
+
+
+@pytest.fixture
+def open_shop_as(browser: Browser, browser_context_args, swag_accounts):
+    """Factory fixture: open_shop_as("visual-user") logs that account in, in a NEW context of its own
+    (same viewport and base URL as `page`), and returns its shop on the products page.
+
+    For tests that compare two accounts side by side; the contexts are closed after the test.
+    """
+    contexts = []
+
+    def open_shop(account_name: str) -> SimpleNamespace:
+        if account_name not in swag_accounts:
+            pytest.skip(f"Set the username of {account_name} in .env (see .env.example)")
+        context = browser.new_context(**browser_context_args)
+        contexts.append(context)
+        page = context.new_page()
+        account_shop = make_shop(page)
+        account_shop.login.open_page()
+        account_shop.login.login_and_wait_for_products(swag_accounts[account_name]["username"],
+                                                       swag_accounts[account_name]["password"])
+        account_shop.inventory.verify_products_page_is_open()
+        return account_shop
+
+    yield open_shop
+    for context in contexts:
+        context.close()
 
 
 # --- authentication state (Day 6) ------------------------------------------------

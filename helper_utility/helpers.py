@@ -3,7 +3,8 @@
 * Element finder: reads a locator string and gives Playwright the selector (the same idea as Unit 1).
   A locator is plain XPath with no prefix (the default, and what every page writes), or
   "prefix=criteria" / "prefix:criteria": "id=cart", "name=q", "css=#cart", "link=...", "partial link=...",
-  "tag_name=h1", "class_name=errors", "xpath=//h1".
+  "tag_name=h1", "class_name=errors", "xpath=//h1", and "testid=checkout" (the element whose data-test
+  attribute is "checkout": a short form of "//*[@data-test='checkout']").
 * Test data: one JSON file per area in dataset/ (products, login, catalog, cart, checkout).
 * Prices: "$1,120.00" -> 1120.0.
 * Random data (Faker): checkout details, an unregistered login, a password - generated at run time,
@@ -29,6 +30,7 @@ class Helper:
         # {raw}: the criteria as written; {quoted}: the criteria as an XPath string literal
         strategies = {
             "id": "id={raw}",
+            "testid": "xpath=//*[@data-test={quoted}]",  # Swag Labs' test attribute: "testid=checkout"
             "name": "xpath=//*[@name={quoted}]",
             "xpath": "xpath={raw}",
             "link": "xpath=//a[normalize-space()={quoted}]",

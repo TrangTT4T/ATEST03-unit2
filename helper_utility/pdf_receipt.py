@@ -41,6 +41,10 @@ class PdfReceipt:
         """The first line under SHIP TO, e.g. "Ann Lee"."""
         return self.ship_to[0] if self.ship_to else ""
 
+    def ships_to(self, name: str) -> bool:
+        """True when the receipt ships to ``name``, spaces ignored: the PDF text can split a name ("T onya")."""
+        return self._without_spaces(self.customer_name) == self._without_spaces(name)
+
     @property
     def postal_code(self) -> str:
         """The second line under SHIP TO, e.g. "12345"."""

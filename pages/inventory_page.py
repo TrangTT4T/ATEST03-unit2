@@ -28,6 +28,10 @@ class InventoryPage(BasePage):
         """The card of one product: name, description, price and its Add to cart / Remove button."""
         return self.find_element(self._product_card.format(product_name))
 
+    def get_product_card_widths(self) -> list[float]:
+        """The width of every product card in CSS pixels (a phone shows one card per row)."""
+        return [box["width"] for box in (card.bounding_box() for card in self.find_elements(self._cards).all()) if box]
+
     def open_product_page(self, product_name: str):
         """Click the product's name and wait for its product page."""
         self.click_element(self._product_name_link.format(product_name))
@@ -64,6 +68,7 @@ class InventoryPage(BasePage):
 
     # --- Locators -------------------------------------------------------------
     # Product cards. .format(product_name): the card whose name is exactly product_name
+    _cards = "//*[@data-test='inventory-item']"
     _product_names = "//*[@data-test='inventory-item-name']"
     _product_prices = "//*[@data-test='inventory-item-price']"
     _product_card = ("//*[@data-test='inventory-item']"

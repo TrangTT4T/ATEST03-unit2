@@ -160,6 +160,21 @@ class BasePage:
         with self._report_timeout(f"Selecting {label!r} in", locator):
             self.find_element(locator).select_option(label=label)
 
+    def is_wider_than_the_screen(self) -> bool:
+        """True when the page scrolls sideways: its content is wider than the screen (a layout defect on a phone)."""
+        return self.page.evaluate("document.documentElement.scrollWidth > window.innerWidth")
+
+    def get_screen_width(self) -> int:
+        """The width of the browser's viewport in CSS pixels, e.g. 390 on an iPhone 13."""
+        return self.page.evaluate("window.innerWidth")
+
+    def take_screenshot(self) -> bytes:
+        """A full-page PNG once the page has settled: no network traffic, web fonts loaded, no animation."""
+        self.logger.info("Screenshot of %s", self.page.url)
+        self.page.wait_for_load_state("networkidle")
+        self.page.evaluate("document.fonts.ready")
+        return self.page.screenshot(full_page=True, animations="disabled", caret="hide")
+
     ############################################################################
     # State methods
     # Scope: Every page > element state

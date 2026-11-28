@@ -127,7 +127,8 @@ def test_order_pdf_matches_the_order(fill_cart, checkout_information, products, 
     step_number += 1
     with step(step_number, "Verify the order date is today and the receipt ships to the customer"):
         assert receipt.order_date.startswith(f"{today:%B} {today.day}, {today.year}"), receipt.order_date
-        assert receipt.customer_name == f"{customer['first_name']} {customer['last_name']}"
+        expected_name = f"{customer['first_name']} {customer['last_name']}"
+        assert receipt.ships_to(expected_name), f"Ships to {receipt.customer_name!r}, expected {expected_name!r}"
         assert receipt.postal_code == customer["postal_code"]
     step_number += 1
     with step(step_number, f"Verify the products and prices: {expected_items}"):

@@ -34,9 +34,14 @@ ATEST03-unit2/
 ├── tests/
 │   ├── conftest.py              # fixture: products, accounts, shop, logged_in_shop, fill_cart, phiên đã lưu, step
 │   ├── test_login.py  test_catalog.py  test_cart.py  test_checkout.py   # mỗi khu vực một file
-│   └── test_auth_state.py       # phiên đăng nhập đã lưu + kiểm tra cô lập
+│   ├── test_auth_state.py       # phiên đăng nhập đã lưu + kiểm tra cô lập
+│   ├── test_visual.py           # so ảnh chụp với standard user (phát hiện V1)
+│   └── test_mobile.py           # context giả lập iPhone 13: bố cục và đặt hàng
 ├── helper_utility/helpers.py    # class Helper: by_locator(), read_test_data(), money_to_float(), dữ liệu Faker
 ├── helper_utility/pdf_receipt.py  # class PdfReceipt: đọc PDF đơn hàng thành từng trường (pypdf)
+├── helper_utility/visual_comparison.py  # class VisualComparison: so hai ảnh chụp từng pixel (Pillow)
+├── tools/flaky_report.py       # chạy bộ test N lần: test ổn định / luôn fail / chập chờn (Day 8)
+├── allure/categories.json      # phân loại lỗi trong Allure (Day 8 phân tích lỗi)
 └── helper_utility/steps.py      # fixture `step`: bước đánh số -> bước Allure + nhóm trong trace
 ```
 
@@ -86,6 +91,10 @@ pytest session
 
 Tạo một context chỉ mất vài mili giây, nên test nào cũng bắt đầu ở trạng thái chưa đăng nhập, giỏ trống, mà không phải mở lại trình duyệt. Swag Labs giữ đăng nhập trong cookie (`session-username`) và giỏ hàng trong localStorage (`cart-contents`): cả hai thuộc về context, nên không test nào thấy giỏ của test khác.
 
+#### Context không chỉ để cô lập: giả lập điện thoại
+
+Context còn giả lập được thiết bị. `phone_shop` (`tests/conftest.py`) mở Swag Labs như một chiếc iPhone 13 trong danh sách thiết bị của Playwright — màn hình 390×844, cảm ứng, user agent di động, mật độ điểm ảnh 3 — trên Chromium, đã đăng nhập bằng cookie đã lưu. `tests/test_mobile.py` kiểm tra trang sản phẩm vừa màn hình điện thoại (mỗi hàng một thẻ sản phẩm rộng hết màn hình, không cuộn ngang) và khách đặt hàng được trên điện thoại. Trình duyệt khác: `pytest --browser firefox --browser webkit` chạy bộ test trên từng trình duyệt (cài trước bằng `playwright install firefox webkit`).
+
 ### 3. Locator
 
 Swag Labs gắn thuộc tính `data-test` lên các phần tử, làm riêng cho test tự động. Thuộc tính này không đổi khi bố cục hay chữ trên trang thay đổi, nên được ưu tiên trước:
@@ -97,6 +106,8 @@ Swag Labs gắn thuộc tính `data-test` lên các phần tử, làm riêng cho
 | 3 | Giới hạn trong phần tử cha theo chữ | `//*[@data-test='inventory-item'][.//*[@data-test='inventory-item-name' and normalize-space()='{}']]//button` — nút của một thẻ sản phẩm |
 | 4 | Chữ trên nút, trong phạm vi đó | `…//button[normalize-space()='Remove']` |
 | Không bao giờ | Vị trí | `(//button)[3]`, `//div[2]/a` |
+
+`testid=checkout` là cách viết ngắn của `//*[@data-test='checkout']` (prefix `testid` trong `Helper.by_locator`); các page vẫn giữ XPath đầy đủ, cách viết ngắn dùng khi thử nhanh hoặc viết page mới.
 
 #### Locator và các method riêng của BasePage (cùng bố cục với Unit 1)
 
@@ -122,6 +133,7 @@ Locator là chuỗi XPath mô tả phần tử, gom dưới một dòng comment 
 | `name=user-name` | `xpath=//*[@name='user-name']` |
 | `link=About` / `partial link=Abo` | `xpath=//a[normalize-space()='…']` / `xpath=//a[contains(normalize-space(),'…')]` |
 | `css=#checkout`, `tag_name=h3`, `class_name=error`, `xpath=//h3` | `css=#checkout`, `css=h3`, `css=.error`, `xpath=//h3` |
+| `testid=checkout` | `xpath=//*[@data-test='checkout']` |
 | `foo=bar` | `ValueError: Element locator with prefix 'foo' is not supported: 'foo=bar'` |
 
 Page không bao giờ gọi `self.page`: page gọi các method của `BasePage`, các method này ghi log thao tác (hiện trong báo cáo của test fail, mật khẩu hiện `***`):
@@ -269,6 +281,17 @@ Swag Labs có sáu tài khoản demo; bốn tài khoản cố ý có lỗi. `pyt
 | `error-user` | 15 fail | sắp xếp không có tác dụng; chỉ thêm được 3/6 sản phẩm; nút Remove ở trang danh sách không có tác dụng; trang sản phẩm không có mô tả; ô họ (last name) không nhận chữ, vậy mà form vẫn cho đi tiếp; bấm Finish không hoàn tất đơn |
 | `problem-user` | 19 fail | sắp xếp không có tác dụng; bấm tên sản phẩm mở nhầm trang (Fleece Jacket: "ITEM NOT FOUND"); chỉ thêm được 3 sản phẩm, nút Remove ở trang danh sách không có tác dụng; gõ họ (last name) thì đè lên tên (first name), nên checkout không qua được form thông tin |
 
+### 5c. So sánh ảnh chụp màn hình (`tests/test_visual.py`)
+
+Assertion trên chữ không thấy được những gì khách nhìn thấy: ảnh sai, nút lệch chỗ. Playwright cho Python không có assertion so ảnh, nên `VisualComparison` (`helper_utility/visual_comparison.py`, Pillow) so hai ảnh chụp từng pixel: một pixel được coi là khác khi một kênh màu lệch quá 16 (nhiễu khử răng cưa nằm dưới mức này), và test cho phép tối đa 0,1 % số pixel khác nhau. Ảnh chuẩn, ảnh thực tế và ảnh đánh dấu (pixel khác tô đỏ) được lưu lại và đính kèm vào Allure.
+
+Ảnh chuẩn là trang sản phẩm của standard user, chụp trong cùng lần chạy, cùng trình duyệt và kích thước màn hình (`BasePage.take_screenshot()` chờ hết traffic mạng và font tải xong): không lưu ảnh chuẩn vào repo, nên không bao giờ bị lệch font hay cách vẽ giữa các máy.
+
+| Ca | Kết quả |
+| --- | --- |
+| `standard-user` so với chính nó | pass: phép so sánh ổn định |
+| `visual-user` | **xfail, phát hiện V1**: 2,8 % số pixel khác — ảnh Backpack là một con chó, giá sai, tên sản phẩm và một nút bị lệch, icon giỏ hàng tụt xuống đè lên ô sắp xếp |
+
 ### 6. Kiểm tra cô lập
 
 `tests/test_auth_state.py::test_login_state_does_not_leak_into_other_tests` chứng minh test dùng `page` mặc định không ở trạng thái đăng nhập, kể cả khi một test khác trong cùng phiên chạy dùng phiên đăng nhập đã lưu.
@@ -280,7 +303,7 @@ cd ATEST03-unit2
 pip install -r requirements.txt
 playwright install chromium
 cp .env.example .env              # điền tài khoản demo ghi trên https://www.saucedemo.com
-pytest --collect-only -q          # 46 test
+pytest --collect-only -q          # 50 test
 pytest -m smoke                   # 3 test: đăng nhập, thêm vào giỏ, hoàn tất đơn
 pytest --headed --slowmo 300      # xem trình duyệt chạy
 ```
@@ -407,6 +430,16 @@ An toàn vì mỗi test có context riêng (Day 5) và không test nào phụ th
 
 Test nào cũng mang một marker yêu cầu (`@pytest.mark.add_to_cart` …) và một marker mức rủi ro: `pytest -m add_to_cart` chạy một yêu cầu, `pytest -m critical --collect-only -q` liệt kê mọi test rủi ro Critical, và marker hiện trong báo cáo HTML. `-rfEs` trong `pytest.ini` liệt kê test fail, lỗi và test bị bỏ qua (kèm lý do) ở cuối lần chạy.
 
+#### Allure: phân loại lỗi, môi trường, bằng chứng
+
+`tests/conftest.py` chuẩn bị kết quả Allure ở đầu mỗi lần chạy (Day 8, phân tích lỗi):
+
+| Thành phần | Lấy từ đâu | Báo cáo hiển thị gì |
+| --- | --- | --- |
+| Phân loại (categories) | `allure/categories.json`, được chép vào thư mục kết quả | mỗi test fail được xếp vào: **Product defects** (assertion sai: shop hiện sai giá trị), **Test or environment problems** (exception: timeout, không tìm thấy phần tử), **Known defects** (xfail), **Set-up** (bị bỏ qua vì thiếu giá trị trong `.env`) |
+| Môi trường | `environment.properties`, do `pytest_configure` ghi | base URL, trình duyệt, `--account`, phiên bản Python và Playwright của lần chạy |
+| Bằng chứng khi fail | `pytest_runtest_makereport` | ngay trong test fail: ảnh chụp cả trang, địa chỉ trang, **Playwright trace** (`trace.zip`, mở bằng `playwright show-trace`) và video |
+
 ### 6. Câu hỏi ôn tập
 
 1. Trace cho thấy những gì mà ảnh chụp màn hình không thấy?
@@ -420,7 +453,7 @@ Test nào cũng mang một marker yêu cầu (`@pytest.mark.add_to_cart` …) v�
 
 Unit 2 · LO3 · Assignment/Lab · 150 phút · Hybrid
 
-Buổi lab tự động hoá các ưu tiên theo rủi ro trên Playwright: 46 test, tất cả đều chạy mặc định (Swag Labs không cần loại test manual hay tạo dữ liệu thật).
+Buổi lab tự động hoá các ưu tiên theo rủi ro trên Playwright: 50 test, tất cả đều chạy mặc định (Swag Labs không cần loại test manual hay tạo dữ liệu thật).
 
 ### 1. Các luồng ưu tiên (từ bảng rủi ro)
 
@@ -431,6 +464,8 @@ Buổi lab tự động hoá các ưu tiên theo rủi ro trên Playwright: 46 t
 | P1 | Trang sản phẩm = danh sách | R03 High | `test_catalog.py`: 6 ca (mỗi sản phẩm một) | `parametrize` trên `products.json` |
 | P1 | Đăng nhập, đăng xuất, user bị khoá, phiên đã lưu | R04 High | `test_login.py` 8 test + `test_auth_state.py` 2 test | `accounts` từ `.env` + Faker, `saved_login_state` |
 | P1 | Tên, mô tả, giá trong danh sách | R05 High | `test_catalog.py`: 6 ca | `product_card(name)` |
+| P2 | Hiển thị đúng: so ảnh chụp | R05 High | `test_visual.py`: 2 ca, 1 ca `xfail` (V1) | `VisualComparison`, ảnh chuẩn chụp trong cùng lần chạy |
+| P2 | Dùng được trên điện thoại | R01/R05 Medium | `test_mobile.py`: 2 test | context iPhone 13 từ `playwright.devices` |
 | P2 | Sắp xếp | R07 Medium | `test_catalog.py`: 4 ca (`dataset/catalog.json`) | thứ tự mong đợi tính từ `products.json` |
 
 ### 2. File
@@ -440,6 +475,8 @@ Buổi lab tự động hoá các ưu tiên theo rủi ro trên Playwright: 46 t
 | `tests/test_<khu_vực>.py` | Mỗi khu vực một file; test nào cũng có marker rủi ro, bộ chạy và yêu cầu |
 | `tests/conftest.py` | Fixture: dữ liệu, tài khoản, page object, shop đã đăng nhập, factory giỏ hàng, phiên đã lưu, bước |
 | `tests/test_auth_state.py` | Phiên đăng nhập đã lưu và kiểm tra cô lập |
+| `tools/flaky_report.py` | Báo cáo test chập chờn qua N lần chạy (Day 8) |
+| `allure/categories.json` | Phân loại lỗi của báo cáo Allure |
 | `pages/` | Page Object, mỗi trang của shop một class |
 | `dataset/` | Dữ liệu test, mỗi khu vực một file |
 | `pytest.ini` | base URL, tracing, báo cáo, danh sách marker (`--strict-markers`) |
@@ -463,8 +500,8 @@ pytest tests/test_checkout.py       # một khu vực
 
 | Kiểm tra | Kết quả |
 | --- | --- |
-| `pytest` | 45 pass, 1 xfailed (phát hiện F1), khoảng 60 giây |
-| `pytest -n 4` | 45 pass, 1 xfailed, khoảng 26 giây |
+| `pytest` | 48 pass, 2 xfailed (phát hiện F1, V1), khoảng 72 giây |
+| `pytest -n 4` | 48 pass, 2 xfailed, khoảng 31 giây |
 | `pytest` khi chưa có `.env` | mọi test cần tài khoản được bỏ qua, kèm tên biến cần điền |
 | Test fail | `test-results/<test>/trace.zip`, ảnh, video |
 
@@ -526,13 +563,16 @@ test fail
 
 #### B2. Kiểm soát test chập chờn
 
-Chạy cả bộ vài lần rồi so sánh; mỗi lần ghi một file JUnit riêng:
+`tools/flaky_report.py` làm việc so sánh đó: chạy bộ test N lần (hoặc đọc các file JUnit) rồi xếp từng test vào nhóm:
 
 ```bash
-pytest --junitxml=reports/run_1.xml
-pytest --junitxml=reports/run_2.xml
-pytest --junitxml=reports/run_3.xml
+python tools/flaky_report.py --runs 3                        # chạy pytest 3 lần rồi báo cáo
+python tools/flaky_report.py --runs 5 -- tests/test_checkout.py -k pdf   # tham số pytest đặt sau --
+python tools/flaky_report.py reports/run_1.xml reports/run_2.xml        # các file JUnit có sẵn
 ```
+
+Script in ra các test ổn định, luôn fail và chập chờn, kèm kết quả từng lần chạy, và trả mã thoát 1 khi có test fail hoặc chập chờn. Trong lúc viết phần này, nó đã tìm ra một test chập chờn thật: biên lai PDF dãn chữ một số tên ("T onya Jordan"), nên test biên lai chỉ fail khi Faker sinh ra tên như vậy; giờ tên được so sau khi bỏ khoảng trắng.
+
 
 | Kết quả qua các lần chạy | Ý nghĩa | Việc cần làm |
 | --- | --- | --- |
@@ -595,5 +635,5 @@ Select-String -Path tests\*.py -Pattern ':nth-child|nth=|\.nth\('               
 | Kiểm tra | Kết quả |
 | --- | --- |
 | Các lệnh tìm ở B3 | không có kết quả |
-| Chạy tuần tự + chạy song song (`-n 4`) | mỗi lần 45 pass + 1 xfailed, 0 test chập chờn |
+| Chạy tuần tự, chạy song song (`-n 4`), `tools/flaky_report.py --runs 3 -- -n 4` | mỗi lần 48 pass + 2 xfailed; báo cáo chập chờn: 50 ổn định, 0 luôn fail, 0 chập chờn |
 | Cố ý làm fail | `trace.zip`, `test-failed-1.png`, `video.webm` trong `test-results/` |

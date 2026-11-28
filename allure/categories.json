@@ -1,0 +1,20 @@
+[
+  {
+    "name": "Known defects (xfail): a finding the shop has not fixed yet",
+    "matchedStatuses": ["skipped"],
+    "messageRegex": "(?s).*Finding.*"
+  },
+  {
+    "name": "Set-up: missing .env values",
+    "matchedStatuses": ["skipped"],
+    "messageRegex": "(?s).*\\.env.*"
+  },
+  {
+    "name": "Product defects: the shop showed a wrong value",
+    "matchedStatuses": ["failed"]
+  },
+  {
+    "name": "Test or environment problems: timeouts, locators, browser errors",
+    "matchedStatuses": ["broken"]
+  }
+]

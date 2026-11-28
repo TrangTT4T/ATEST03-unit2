@@ -53,9 +53,14 @@ ATEST03-unit2/
 │   ├── test_catalog.py          # @browse_catalog, @product_details (High; sorting Medium)
 │   ├── test_cart.py             # @add_to_cart, @update_cart        (Critical; + finding F1)
 │   ├── test_checkout.py         # @checkout: totals, required fields, PDF receipt (Critical)
-│   └── test_auth_state.py       # @secure_login: saved login + isolation check
+│   ├── test_auth_state.py       # @secure_login: saved login + isolation check
+│   ├── test_visual.py           # visual comparison with the standard user (finding V1)
+│   └── test_mobile.py           # an iPhone 13 context: layout and an order
 ├── helper_utility/helpers.py    # class Helper: by_locator(), read_test_data(), money_to_float(), Faker data
 ├── helper_utility/pdf_receipt.py  # class PdfReceipt: the downloaded order PDF read into fields (pypdf)
+├── helper_utility/visual_comparison.py  # class VisualComparison: two screenshots, pixel by pixel (Pillow)
+├── tools/flaky_report.py         # run the suite N times: stable / failing / flaky tests
+├── allure/categories.json        # Allure failure categories
 ├── helper_utility/steps.py      # the `step` fixture: numbered steps -> Allure step + trace group
 └── docs/Unit2_Playwright_vi.md, Unit2_Playwright_en.md
 ```
@@ -68,13 +73,15 @@ Requires **Python 3.12**: the version in `.python-version` (PyCharm, VS Code, py
 pip install -r requirements.txt
 playwright install chromium
 cp .env.example .env                 # fill in the demo accounts shown on https://www.saucedemo.com
-pytest                               # 46 tests: 45 pass, 1 xfail (finding F1)
+pytest                               # 50 tests: 48 pass, 2 xfail (findings F1, V1)
 pytest -m smoke                      # login, add to cart, complete an order
 pytest -m critical                   # every Critical-risk test
 pytest -m add_to_cart                # every test of one requirement
 pytest tests/test_checkout.py        # one area
 pytest -n auto                       # parallel
 pytest --account problem-user        # the same suite as another demo account (see below)
+pytest --browser firefox --browser webkit   # other browsers (playwright install firefox webkit)
+python tools/flaky_report.py --runs 3       # stable / failing / flaky tests over 3 runs
 pytest tests/test_cart.py --headed --slowmo 300
 playwright show-trace test-results/<test>/trace.zip
 ```
@@ -150,6 +157,13 @@ Swag Labs has six demo accounts; four of them have defects on purpose, for pract
 | `problem-user` | 19 failed | sorting does nothing; product names open the wrong product page (Fleece Jacket: "ITEM NOT FOUND"); only 3 products can be added, Remove on the products page does nothing; typing the last name overwrites the first name, so checkout never gets past the information form |
 
 Every failure names its step ("failed in Step 2: Verify the cart badge shows 6"), so the run reads as a defect list of that account.
+
+## Reliability and reporting
+
+- **Allure** sorts every failure into *Product defects* (an assertion failed), *Test or environment problems* (a timeout, a missing element), *Known defects* (xfail) and *Set-up*; it shows the run's environment (base URL, browsers, account, versions) and, in a failed test, a screenshot, the page address, the Playwright trace and the video.
+- **`tools/flaky_report.py`** runs the suite N times (or reads JUnit files) and lists the stable, failing and flaky tests; exit code 1 when one is failing or flaky.
+- **Visual comparison** (`tests/test_visual.py`): the products page of an account against the standard user's, pixel by pixel, the reference taken in the same run. Finding **V1**: visual_user's page differs by 2.8 % (a dog instead of the Backpack, wrong prices, the cart icon moved), kept as `xfail(strict=True)`.
+- **Phone** (`tests/test_mobile.py`): an iPhone 13 context; the products page fits the screen and an order goes through.
 
 ## Known defect
 
