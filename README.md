@@ -85,6 +85,10 @@ Without `.env`, every test that needs an account is skipped and the end of the r
 
 Locators are plain XPath strings that describe the element — mostly Swag Labs' `data-test` attributes (`"//*[@data-test='checkout']"`, `"//*[@data-test='shopping-cart-badge']"`) — declared at the bottom of each page class under a comment naming the area of the page; a template uses `{}` and `.format()`. `Helper.by_locator()` (`helper_utility/helpers.py`, the same prefixes as Unit 1) turns them into Playwright selectors. Pages never touch `self.page`: they call the `BasePage` methods (`find_element`, `find_elements`, `get_texts`, `click_element`, `type_text`, `select_option` …), which log the action. Swag Labs is a single-page app, so a click that changes the page waits for the new address. No method returns the page for chaining. Details: Day 5 section 3 of the unit document.
 
+## Log in once, reuse the cookie
+
+The login form is used once per session (once per worker with `-n`): `saved_login_state` logs in and saves the cookies (`context.storage_state()`), and `logged_in_shop` puts that cookie into each test's own context and opens the products page directly. In a serial run the Login button is clicked 7 times (the saved login + the 6 tests about logging in) instead of once per test; 37 tests reuse the cookie. Swag Labs' session cookie lasts 10 minutes, so the saved state is renewed when it is older than 9 minutes. Only the cookie is copied, so every test still starts with an empty cart. Details: Day 6 section 3 of the unit document.
+
 ## How a test reads
 
 Every test: a docstring, `# Test data`, then `# Execution steps` made only of `with step(step_number, "..."):` blocks: `step_number = 1` before the first step, `step_number += 1` before each next one (the `step` fixture stops the test if a number is skipped or repeated). Steps show up in the Allure report, in the Playwright trace and in the error message of a failure (`failed in Step 3: ...`). Page methods are grouped under `####` banners with `# Scope: <area of the page>`, each with a docstring; locators stay at the bottom.

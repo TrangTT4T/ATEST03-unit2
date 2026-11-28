@@ -12,7 +12,8 @@ class CheckoutOverviewPage(BasePage):
     # Scope: Checkout: Overview > Items, Price Total
     ############################################################################
     def get_product_names(self) -> list[str]:
-        """The names of the products in the order, in the order shown."""
+        """The names of the products in the order, in the order shown (waits for the list to be drawn)."""
+        self.find_element(self._cart_list).wait_for(state="visible")
         return self.get_texts(self._item_names)
 
     @property
@@ -37,6 +38,7 @@ class CheckoutOverviewPage(BasePage):
 
     # --- Locators -------------------------------------------------------------
     # Items
+    _cart_list = "//*[@data-test='cart-list']"
     _item_names = "//*[@data-test='cart-list']//*[@data-test='inventory-item-name']"
     # Price total
     _item_total = "//*[@data-test='subtotal-label']"

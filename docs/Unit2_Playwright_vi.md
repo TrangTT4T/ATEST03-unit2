@@ -151,9 +151,9 @@ Không method nào trả về page để gọi nối tiếp: gọi method rồi 
 | `accounts` | test | — | Mọi lần đăng nhập trong `dataset/login.json` theo tên: tài khoản demo + tài khoản bịa bằng Faker: `unknown-user`, `wrong-password`, `missing-username`, `missing-password` |
 | `checkout_information` | test | — | Khách hàng bịa cho form checkout (Faker) |
 | `shop` | test | `Helper.create_page_object()` | Mọi Page Object gắn với page của test: `shop.login`, `shop.inventory`, `shop.cart` … |
-| `logged_in_shop` | test | step `Given I am logged in` | `shop`, đã đăng nhập bằng tài khoản `--account`, đang ở trang sản phẩm |
+| `logged_in_shop` | test | step `Given I am logged in` | `shop`, đã đăng nhập bằng tài khoản `--account` qua cookie đã lưu (không qua form), đang ở trang sản phẩm |
 | `fill_cart` | test | step `Given ... in the cart` | Factory: `fill_cart(["Sauce Labs Backpack", "Sauce Labs Onesie"])` |
-| `saved_login_state` | session | — | Lưu phiên đăng nhập (Day 6) |
+| `saved_login_state` | test (dựa trên bản ghi của session) | — | Đăng nhập một lần mỗi phiên chạy, làm mới sau 9 phút (Day 6) |
 | `step` | test | — | Bước đánh số (mục 5) |
 
 ```python
@@ -351,26 +351,41 @@ Trang hoàn tất đơn có nút **Generate PDF order** tải về biên lai (`s
 
 Chữ trích từ PDF bị dãn ở vài chỗ ("T ax $ 3.20", "Sauce Labs Bolt T -Shirt"), nên `PdfReceipt` so nhãn và tên sản phẩm sau khi bỏ khoảng trắng.
 
-### 3. Trạng thái đăng nhập
+### 3. Trạng thái đăng nhập: đăng nhập một lần, dùng lại cookie
 
-Ở Unit 1, scenario nào cần đăng nhập cũng phải gõ tài khoản. Playwright có thể đăng nhập một lần rồi lưu cookie và localStorage ra file; context mới tạo từ file đó đã ở trạng thái đăng nhập:
+Ở Unit 1, scenario nào cần đăng nhập cũng phải gõ tài khoản. Ở đây form login chỉ được dùng **một lần cho mỗi phiên chạy** (mỗi worker một lần khi chạy `-n`): `saved_login_state` đăng nhập, lưu cookie và localStorage bằng `context.storage_state()`, rồi test nào chỉ cần ở trạng thái đăng nhập (`logged_in_shop`) sẽ nạp cookie đó vào context riêng của mình và mở thẳng trang sản phẩm:
 
 ```python
-@pytest.fixture(scope="session")
-def saved_login_state(browser: Browser, base_url: str, swag_accounts) -> Path:
-    """Log in once per session and save cookies + localStorage; a test opens a context from the file."""
-    context = browser.new_context(base_url=base_url)
-    login = LoginPage(context.new_page())
-    login.open_page()
-    standard_user = swag_accounts["standard-user"]
-    login.login_and_wait_for_products(standard_user["username"], standard_user["password"])
-    AUTH_FILE.parent.mkdir(exist_ok=True)
-    context.storage_state(path=str(AUTH_FILE))
-    context.close()
-    return AUTH_FILE
+@pytest.fixture
+def saved_login_state(browser: Browser, base_url: str, shopper, login_state_record) -> Path:
+    age = time.monotonic() - login_state_record["saved_at"]
+    if login_state_record["path"] is None or age > LOGIN_STATE_MAX_AGE:   # 9 minutes
+        path = AUTH_DIR / f"{shopper['username']}_{os.getpid()}.json"     # one file per xdist worker
+        context = browser.new_context(base_url=base_url)
+        login = LoginPage(context.new_page())
+        login.open_page()
+        login.login_and_wait_for_products(shopper["username"], shopper["password"])
+        context.storage_state(path=str(path))
+        context.close()
+        login_state_record.update(path=path, saved_at=time.monotonic())
+    return login_state_record["path"]
+
+
+@pytest.fixture
+def logged_in_shop(shop, saved_login_state) -> SimpleNamespace:
+    shop.inventory.add_login_cookies(saved_login_state)   # only the cookie: every test still has an empty cart
+    shop.inventory.open_page()
+    shop.inventory.verify_products_page_is_open()
+    return shop
 ```
 
-Dùng trong `tests/test_auth_state.py` (rủi ro R04). `.auth/standard_user.json` chứa một phiên đăng nhập: đã có trong `.gitignore`, không bao giờ commit. Các test khác đăng nhập qua form (`logged_in_shop`): trên Swag Labs việc này chưa tới một giây, và giữ cho mỗi test không phụ thuộc vào cookie đăng nhập của phiên chạy, vì Swag Labs cho cookie hết hạn 10 phút sau khi đăng nhập.
+| Kiểm tra (chạy tuần tự) | Kết quả |
+| --- | --- |
+| Test bắt đầu ở trạng thái đăng nhập (`logged_in_shop`) | 37, tất cả dùng cookie đã lưu |
+| Số lần bấm nút Login | 7: một lần để lưu phiên + 6 test về chính việc đăng nhập (đăng nhập đúng, 5 kiểu bị từ chối), các test này buộc phải đi qua form |
+| Cookie phiên của Swag Labs | hết hạn 10 phút sau khi đăng nhập: phiên đã lưu được làm mới khi quá 9 phút (đã thử đặt giới hạn 3 giây: phiên đăng nhập lại sau mỗi vài giây, các test giỏ hàng và checkout vẫn pass) |
+
+Chỉ chép cookie: Swag Labs giữ giỏ hàng trong localStorage, nên test nào cũng vẫn bắt đầu với giỏ trống. `tests/test_auth_state.py` (rủi ro R04) minh hoạ cách dùng file còn lại — tạo context mới với `storage_state=` — và kiểm tra `page` mặc định vẫn ở trạng thái chưa đăng nhập. `.auth/` chứa phiên đăng nhập: đã có trong `.gitignore`, không bao giờ commit.
 
 ### 4. Chạy song song
 
@@ -480,7 +495,7 @@ Day 8 khép lại cả hai unit: phần A ôn Unit 2 so với Unit 1, phần B l
 | Cô lập | Trình duyệt mới mỗi scenario | Context mới mỗi test |
 | Chờ | `WebDriverWait` | Thao tác tự chờ, `expect()` tự thử lại |
 | Bằng chứng khi fail | Ảnh chụp màn hình | Trace + ảnh + video |
-| Đăng nhập | Đăng nhập qua UI mỗi lần | Đăng nhập qua UI mỗi test + lưu storage state |
+| Đăng nhập | Đăng nhập qua UI mỗi lần | Form login một lần mỗi phiên chạy, sau đó dùng cookie đã lưu |
 | Tốc độ | Tuần tự | Song song `-n auto` |
 | Chọn test | `behave --tags=@cart` | `pytest tests/test_cart.py`, `pytest -m add_to_cart` |
 | Ứng dụng | Store demo Shopify | Swag Labs (không chặn bot: xem phần mở đầu) |

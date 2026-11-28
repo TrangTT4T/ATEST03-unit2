@@ -26,6 +26,7 @@ Layout of every page object (one class per file):
 * a ``# --- Locators ---`` section at the BOTTOM of the class: XPath strings, grouped by area.
 """
 import contextlib
+import json
 import logging
 import re
 from collections.abc import Iterator
@@ -57,6 +58,16 @@ class BasePage:
         self.logger.info("Open %s", path or self.path)
         with self._report_timeout("Opening", path or self.path):
             self.page.goto(path or self.path)  # relative: pytest-playwright gives every context the --base-url
+
+    def add_login_cookies(self, login_state_file: Path):
+        """Put the cookies of a saved login state (context.storage_state) into this page's context.
+
+        The next page opened is then logged in, without the login form. Only the cookies: the
+        localStorage of the saved state (Swag Labs keeps the cart there) is left out.
+        """
+        cookies = json.loads(Path(login_state_file).read_text(encoding="utf-8"))["cookies"]
+        self.page.context.add_cookies(cookies)
+        self.logger.info("Use the saved login of %s", Path(login_state_file).name)
 
     def wait_until_url_contains(self, fragment: str):
         """Wait until the address contains ``fragment``, for example "/cart.html"."""

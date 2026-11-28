@@ -10,7 +10,11 @@ class CartPage(BasePage):
     # Scope: Cart page > Cart items
     ############################################################################
     def get_product_names(self) -> list[str]:
-        """The names of the products in the cart, in the order shown."""
+        """The names of the products in the cart, in the order shown ([] for an empty cart).
+
+        Waits for the cart list first: the address changes to /cart.html a moment before the list is drawn.
+        """
+        self.find_element(self._cart_list).wait_for(state="visible")
         return self.get_texts(self._item_names)
 
     def get_product_price(self, product_name: str) -> str:
@@ -37,6 +41,7 @@ class CartPage(BasePage):
 
     # --- Locators -------------------------------------------------------------
     # Cart items. .format(product_name): the line whose name is exactly product_name
+    _cart_list = "//*[@data-test='cart-list']"
     _item_names = "//*[@data-test='cart-list']//*[@data-test='inventory-item-name']"
     _item_line = "//*[@data-test='cart-list']//*[@data-test='inventory-item'][.//*[normalize-space()='{}']]"
     _item_price = _item_line + "//*[@data-test='inventory-item-price']"

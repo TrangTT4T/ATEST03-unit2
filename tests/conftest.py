@@ -8,13 +8,15 @@ Fixture map (Day 5-6):
   accounts           every login a test may need: the demo accounts + made-up ones (Faker), new per test
   checkout_information  a made-up customer for the checkout form (Faker)
   shop               Page Objects bound to this test's page
-  logged_in_shop     shop, logged in as the standard user, on the products page
+  logged_in_shop     shop, logged in with the saved cookie (no login form), on the products page
   fill_cart          factory fixture: add products from the products page
-  saved_login_state  login once, save the storage state (Day 6: authentication state reuse)
+  saved_login_state  log in ONCE through the form, save the cookies; again only when they are about to expire
   step               numbered test steps: Allure step + trace group (helper_utility/steps.py)
 """
+import logging
 import os
 import shutil
+import time
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -30,7 +32,8 @@ from pages import (BasePage, CartPage, CheckoutCompletePage, CheckoutInformation
 ROOT = Path(__file__).resolve().parent.parent
 load_dotenv(ROOT / ".env")  # the demo accounts live in .env, which git ignores
 ALLURE_RESULTS = ROOT / "reports" / "allure-results"
-AUTH_FILE = ROOT / ".auth" / "standard_user.json"
+AUTH_DIR = ROOT / ".auth"  # saved login states (git ignores it)
+LOGIN_STATE_MAX_AGE = 9 * 60  # seconds: Swag Labs' session cookie expires 10 minutes after the login
 # Every Swag Labs demo account (listed on its login page) and the .env variable that holds its username.
 ACCOUNT_VARIABLES = {
     "standard-user": "SWAG_USERNAME",
@@ -133,10 +136,16 @@ def shop(page: Page) -> SimpleNamespace:
 
 
 @pytest.fixture
-def logged_in_shop(shop, shopper) -> SimpleNamespace:
-    """``shop``, logged in through the login form as the --account user, on the products page."""
-    shop.login.open_page()
-    shop.login.login_and_wait_for_products(shopper["username"], shopper["password"])
+def logged_in_shop(shop, saved_login_state) -> SimpleNamespace:
+    """``shop``, logged in as the --account user WITHOUT the login form, on the products page.
+
+    The session logged in once (saved_login_state); here the saved cookie goes into this test's own
+    context. Only the cookie: the cart (localStorage) is not copied, so every test starts with an
+    empty cart, as before.
+    """
+    shop.inventory.add_login_cookies(saved_login_state)
+    shop.inventory.open_page()
+    shop.inventory.verify_products_page_is_open()
     return shop
 
 
@@ -151,17 +160,33 @@ def fill_cart(logged_in_shop):
 
 # --- authentication state (Day 6) ------------------------------------------------
 @pytest.fixture(scope="session")
-def saved_login_state(browser: Browser, base_url: str, swag_accounts) -> Path:
-    """Log in once per session and save cookies + localStorage; a test opens a context from the file."""
-    context = browser.new_context(base_url=base_url)
-    login = LoginPage(context.new_page())
-    login.open_page()
-    standard_user = swag_accounts["standard-user"]
-    login.login_and_wait_for_products(standard_user["username"], standard_user["password"])
-    AUTH_FILE.parent.mkdir(exist_ok=True)
-    context.storage_state(path=str(AUTH_FILE))
-    context.close()
-    return AUTH_FILE
+def login_state_record() -> dict:
+    """When this session (this xdist worker) last saved its login state, and where."""
+    return {"path": None, "saved_at": 0.0}
+
+
+@pytest.fixture
+def saved_login_state(browser: Browser, base_url: str, shopper, login_state_record) -> Path:
+    """The saved login of the --account user: cookies + localStorage in .auth/<user>_<process>.json.
+
+    The login form is used ONCE per session (per worker with -n, each has its own file), then the
+    file is reused. It is renewed only when it is older than LOGIN_STATE_MAX_AGE, because Swag Labs'
+    session cookie expires 10 minutes after the login.
+    """
+    age = time.monotonic() - login_state_record["saved_at"]
+    if login_state_record["path"] is None or age > LOGIN_STATE_MAX_AGE:
+        path = AUTH_DIR / f"{shopper['username']}_{os.getpid()}.json"
+        context = browser.new_context(base_url=base_url)
+        login = LoginPage(context.new_page())
+        login.open_page()
+        login.login_and_wait_for_products(shopper["username"], shopper["password"])
+        AUTH_DIR.mkdir(exist_ok=True)
+        context.storage_state(path=str(path))
+        context.close()
+        logging.getLogger("saved_login_state").info("Logged in as %s through the form; state saved in %s",
+                                                    shopper["username"], path.name)
+        login_state_record.update(path=path, saved_at=time.monotonic())
+    return login_state_record["path"]
 
 
 # --- test steps ---------------------------------------------------------------

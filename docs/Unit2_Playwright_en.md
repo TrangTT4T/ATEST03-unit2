@@ -151,9 +151,9 @@ No method returns the page for chaining: call a method, then use the page, on tw
 | `accounts` | test | — | Every login of `dataset/login.json` by name: the demo accounts + made-up ones (Faker): `unknown-user`, `wrong-password`, `missing-username`, `missing-password` |
 | `checkout_information` | test | — | A made-up customer for the checkout form (Faker) |
 | `shop` | test | `Helper.create_page_object()` | Every Page Object bound to this test's page: `shop.login`, `shop.inventory`, `shop.cart` … |
-| `logged_in_shop` | test | `Given I am logged in` step | `shop`, logged in as the `--account` user, on the products page |
+| `logged_in_shop` | test | `Given I am logged in` step | `shop`, logged in as the `--account` user with the saved cookie (no login form), on the products page |
 | `fill_cart` | test | `Given ... in the cart` step | Factory: `fill_cart(["Sauce Labs Backpack", "Sauce Labs Onesie"])` |
-| `saved_login_state` | session | — | Saved login (Day 6) |
+| `saved_login_state` | test (backed by a session record) | — | Logs in once per session, renews after 9 minutes (Day 6) |
 | `step` | test | — | Numbered steps (section 5) |
 
 ```python
@@ -351,26 +351,41 @@ The order-complete page has a **Generate PDF order** button that downloads the r
 
 The PDF's text comes out letter-spaced in places ("T ax $ 3.20", "Sauce Labs Bolt T -Shirt"), so `PdfReceipt` compares labels and product names without spaces.
 
-### 3. Authentication state
+### 3. Authentication state: log in once, reuse the cookie
 
-Unit 1 typed credentials in every scenario that needed a login. Playwright can log in once and save cookies and localStorage to a file; a new context created from the file starts logged in:
+Unit 1 typed credentials in every scenario that needed a login. Here the login form is used **once per session** (once per worker with `-n`): `saved_login_state` logs in, saves cookies and localStorage with `context.storage_state()`, and every test that only needs to be logged in (`logged_in_shop`) puts that cookie into its own context and opens the products page directly:
 
 ```python
-@pytest.fixture(scope="session")
-def saved_login_state(browser: Browser, base_url: str, swag_accounts) -> Path:
-    """Log in once per session and save cookies + localStorage; a test opens a context from the file."""
-    context = browser.new_context(base_url=base_url)
-    login = LoginPage(context.new_page())
-    login.open_page()
-    standard_user = swag_accounts["standard-user"]
-    login.login_and_wait_for_products(standard_user["username"], standard_user["password"])
-    AUTH_FILE.parent.mkdir(exist_ok=True)
-    context.storage_state(path=str(AUTH_FILE))
-    context.close()
-    return AUTH_FILE
+@pytest.fixture
+def saved_login_state(browser: Browser, base_url: str, shopper, login_state_record) -> Path:
+    age = time.monotonic() - login_state_record["saved_at"]
+    if login_state_record["path"] is None or age > LOGIN_STATE_MAX_AGE:   # 9 minutes
+        path = AUTH_DIR / f"{shopper['username']}_{os.getpid()}.json"     # one file per xdist worker
+        context = browser.new_context(base_url=base_url)
+        login = LoginPage(context.new_page())
+        login.open_page()
+        login.login_and_wait_for_products(shopper["username"], shopper["password"])
+        context.storage_state(path=str(path))
+        context.close()
+        login_state_record.update(path=path, saved_at=time.monotonic())
+    return login_state_record["path"]
+
+
+@pytest.fixture
+def logged_in_shop(shop, saved_login_state) -> SimpleNamespace:
+    shop.inventory.add_login_cookies(saved_login_state)   # only the cookie: every test still has an empty cart
+    shop.inventory.open_page()
+    shop.inventory.verify_products_page_is_open()
+    return shop
 ```
 
-Used by `tests/test_auth_state.py` (risk R04). `.auth/standard_user.json` holds a session: it is in `.gitignore`, never commit it. The other tests log in through the form (`logged_in_shop`): on Swag Labs that takes well under a second, and it keeps every test independent of the session's login cookie, which Swag Labs lets expire 10 minutes after the login.
+| Check (serial run) | Result |
+| --- | --- |
+| Tests that start logged in (`logged_in_shop`) | 37, all with the saved cookie |
+| Clicks on the Login button | 7: the one saved login + the 6 tests about the login itself (valid login, 5 rejected logins), which must use the form |
+| Swag Labs' session cookie | expires 10 minutes after the login: the saved state is renewed when it is older than 9 minutes (checked with the limit set to 3 seconds: the session logged in again every few seconds and the cart and checkout tests passed) |
+
+Only the cookie is copied: Swag Labs keeps the cart in localStorage, so every test still starts with an empty cart. `tests/test_auth_state.py` (risk R04) shows the other way to use the file — a new context created with `storage_state=` — and checks that the default `page` stays logged out. `.auth/` holds sessions: it is in `.gitignore`, never commit it.
 
 ### 4. Parallel execution
 
@@ -480,7 +495,7 @@ Day 8 closes both units: part A revises Unit 2 against Unit 1, part B makes the 
 | Isolation | New browser per scenario | New context per test |
 | Waiting | `WebDriverWait` | Actions auto-wait, `expect()` retries |
 | Failure evidence | Screenshot | Trace + screenshot + video |
-| Login | UI login each time | UI login per test + saved storage state |
+| Login | UI login each time | Login form once per session, then the saved cookie |
 | Speed | Serial | `-n auto` parallel |
 | Selection | `behave --tags=@cart` | `pytest tests/test_cart.py`, `pytest -m add_to_cart` |
 | Application | Shopify demo store | Swag Labs (no bot protection: see the introduction) |

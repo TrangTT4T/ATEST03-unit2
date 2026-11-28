@@ -11,6 +11,11 @@ class InventoryPage(BasePage):
     # Product list methods
     # Scope: Products page > Product cards
     ############################################################################
+    def verify_products_page_is_open(self):
+        """Fail with a clear message when the products page is not shown (e.g. an expired login cookie)."""
+        if not self.is_element_visible(self._product_names, timeout=5):
+            raise AssertionError(f"The products page is not open (now {self.page.url}): the login did not hold")
+
     def get_product_names(self) -> list[str]:
         """The names of the listed products, in the order shown."""
         return self.get_texts(self._product_names)
